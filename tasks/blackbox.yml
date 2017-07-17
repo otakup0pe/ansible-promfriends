@@ -1,0 +1,18 @@
+- name: "generate blackbox config"
+  template:
+    src: '{{promfriends_config|default("blackbox.yml")}}'
+    dest: "{{promfriends_config_path}}/blackbox.yml"
+  register: blackbox_config
+- include: "docker.yml"
+  context: "prom_blackbox"
+  image: "prom/blackbox-exporter"
+  use_command: "-config.file=/blackbox.yml"
+  volume:
+  - "{{promfriends_config_path}}/blackbox.yml:/blackbox.yml"
+  changed: blackbox_config.changed
+- name: "detect blackbox exporter ip"
+  command: >
+    docker inspect --format \{\{.NetworkSettings.IPAddress\}\} prom_blackbox
+  ignore_errors: yes
+  register: promfriends_blackbox_ip
+  changed_when: no

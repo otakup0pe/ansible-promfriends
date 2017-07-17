@@ -1,0 +1,23 @@
+modules:
+  http_alive:
+    prober: http
+    timeout: 10s
+    valid_status_codes: []
+  https_invalid_alive:
+    prober: http
+    timeout: 10s
+    protocol: "tcp4"
+    tls_config:
+      insecure_skip_verify: true
+  pinger:
+    prober: icmp
+    timeout: 3s
+  ssh_alive:
+    prober: tcp
+    timeout: 5s
+    tcp:
+      query_response:
+        - expect: "^SSH-2.0-"
+  tcp_alive:
+    prober: tcp
+    timeout: 5s

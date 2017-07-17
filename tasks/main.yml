@@ -1,0 +1,25 @@
+- name: "enuse prometheus config path exists"
+  file:
+    path: "{{promfriends_config_path}}"
+    owner: "{{prometheus_container_user}}"
+    group: "{{prometheus_container_group}}"
+    mode: "0770"
+    state: "directory"
+- name: "ensure prometheus data path exists"
+  file:
+    path: "{{prometheus_data_path}}"
+    owner: "{{prometheus_container_user}}"
+    group: "{{prometheus_container_group}}"
+    mode: "0770"
+    state: "directory"
+- include: "cadvisor.yml"
+  when: '"cadvisor" in promfriends_contexts'
+- include: "collectd.yml"
+  when: '"collectd" in promfriends_contexts'
+- include: "snmp.yml"
+  when: '"snmp" in promfriends_contexts'
+- include: "cloudwatch.yml"
+  when: '"cloudwatch" in promfriends_contexts'
+- include: "blackbox.yml"
+  when: '"blackbox" in promfriends_contexts'
+- include: "core.yml"

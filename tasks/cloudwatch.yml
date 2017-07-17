@@ -1,0 +1,26 @@
+- name: "generate cloduwatch exporter configuration"
+  template:
+    src: '{{promfriends_config|default("cloudwatch.yml")}}'
+    dest: "{{promfriends_config_path}}/cloudwatch-{{item.region}}.yml"
+    owner: "{{prometheus_container_user}}"
+    group: "{{prometheus_container_group}}"
+    mode: "0660"
+  register: pfcwc_config
+  with_items: "{{promcw_config}}"
+- include: "docker.yml"
+  context: "prom_cloudwatch-{{item.item.region}}"
+  image: "prom/cloudwatch-exporter"
+  volume:
+  - "{{promfriends_config_path}}/cloudwatch-{{item.item.region}}.yml:/config.yml"
+  use_env:
+    AWS_SECRET_ACCESS_KEY: "{{promcw_aws_secret}}"
+    AWS_ACCESS_KEY_ID: "{{promcw_aws_key}}"
+  changed: item.changed
+  with_items: "{{pfcwc_config.results}}"
+- name: "detect cloduwatch exporter ips"
+  command: >
+    docker inspect --format \{\{.NetworkSettings.IPAddress\}\}
+    prom_cloudwatch-{{item.region}}
+  with_items: "{{promcw_config}}"
+  changed_when: no
+  register: promfriends_cloudwatch_ips

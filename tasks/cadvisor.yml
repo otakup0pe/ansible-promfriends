@@ -1,0 +1,15 @@
+- include: "docker.yml"
+  context: "cadvisor"
+  image: "google/cadvisor"
+  publish:
+  - "{{promfriends_docker_host}}:8080:8080"
+  volume:
+  - "/sys:/sys:ro"
+  - "/var/lib/docker/:/var/lib/docker:ro"
+  - "/var/run:/var/run:rw"
+  - "/:/rootfs:ro"
+- name: "detect cadvisor exporter ip address"
+  command: >
+    docker inspect --format \{\{.NetworkSettings.IPAddress\}\} cadvisor
+  register: promfriends_cadvisor_ip
+  changed_when: no

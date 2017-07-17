@@ -1,0 +1,25 @@
+{# https://github.com/prometheus/cloudwatch_exporter -#}
+---
+# CloudWatch Prometheus Expotter for {{item.region}}
+# {{ansible_managed}}
+region: "{{item.region}}"
+period_seconds: {{item.frequency|default(86400)}}
+metrics:
+{% if item.billing|default(True) -%}
+- aws_namespace: "AWS/Billing"
+  aws_metric_name: "EstimatedCharges"
+  aws_statistics:
+  - "Maximum"
+  aws_dimensions:
+  - "Currency"
+  - "ServiceName"
+  range_seconds: {{item.frequency|default(86400)}}
+{% endif -%}
+- aws_namespace: "AWS/S3"
+  aws_metric_name: "BucketSizeBytes"
+  aws_statistics:
+  - "Maximum"
+  aws_dimensions:
+  - "BucketName"
+  - "StorageType"
+  range_seconds: {{item.frequency|default(86400)}}

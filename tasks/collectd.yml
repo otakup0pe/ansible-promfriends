@@ -1,0 +1,10 @@
+- include: "docker.yml"
+  context: "prom_collectd"
+  image: "prom/collectd-exporter"
+  publish:
+  - "{{promfriends_docker_host}}:9103:9103"
+- name: "detect collectd exporter ip address"
+  command: >
+    docker inspect --format \{\{.NetworkSettings.IPAddress\}\} prom_collectd
+  register: promfriends_collectd_ip
+  changed_when: no

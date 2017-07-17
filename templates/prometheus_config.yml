@@ -1,0 +1,80 @@
+global:
+  scrape_interval: "{{prometheus_scrape_interval}}"
+
+scrape_configs:
+- job_name: "prometheus"
+  static_configs:
+  - targets:
+      - "localhost:9090"
+{% if "collectd" in promfriends_contexts -%}
+- job_name: "collectd"
+  static_configs:
+  - targets:
+      - "{{promfriends_collectd_ip.stdout}}:9103"
+{% endif -%}
+{% if "cloudwatch" in promfriends_contexts -%}
+- job_name: "cloudwatch"
+  scrape_interval: 4h
+  static_configs:
+    - targets:
+{% for cw in promfriends_cloudwatch_ips.results %}
+      - "{{cw.stdout}}:9106"
+{% endfor %}
+{% endif -%}
+{% if "cadvisor" in promfriends_contexts -%}
+- job_name: 'cadvisor'
+  static_configs:
+  - targets:
+     - "{{promfriends_cadvisor_ip.stdout}}:8080"
+{% endif -%}
+{% if "snmp" in promfriends_contexts -%}
+{% for snmp in promfriends_snmp_configs -%}
+- job_name: "snmp_{{snmp.name}}"
+  static_configs:
+    - targets:
+{% for target in snmp.targets %}
+      - "{{target}}"
+{% endfor %}
+  scrape_timeout: 30s
+  scrape_interval: 60s
+  metrics_path: /snmp
+  params:
+    module: [{{snmp.name}}]
+  relabel_configs:
+  - source_labels: [__address__]
+    target_label: __param_target
+  - source_labels: [__param_target]
+    target_label: instance
+  - target_label: __address__
+    replacement: "{{promfriends_snmp_ip.stdout}}:9116"
+{% endfor %}
+{% endif -%}
+{% if "blackbox" in promfriends_contexts -%}
+{% for bb in promfriends_blackbox_configs -%}
+- job_name: "blackbox_{{bb.name}}"
+{% if bb.scrape_interval|default(0) != 0 %}
+  scrape_interval: "{{bb.scrape_interval}}"
+{% endif %}
+  metrics_path: "/probe"
+  params:
+{% if bb.module|default("") == "" %}
+    module: ["{{bb.name}}_alive"]
+{% else %}
+    module: ["{{bb.module}}"]
+{% endif %}
+  static_configs:
+    - targets:
+{% for target in bb.targets %}
+      - "{{target}}{% if bb.port|default(0) != 0 -%}:{{bb.port}}{% endif -%}"
+{% endfor %}
+  relabel_configs:
+    - source_labels: [__address__]
+      target_label: __param_target
+    - source_labels: [__param_target]
+      target_label: instance
+    - source_labels: []
+      regex: .*
+      target_label: __address__
+      replacement: "{{promfriends_blackbox_ip.stdout}}:9115"  # Blackbox exporter.
+{% endfor %}
+{% endif -%}

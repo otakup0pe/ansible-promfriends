@@ -1,0 +1,17 @@
+- name: "generate prometheus configuration"
+  template:
+    src: "prometheus_config.yml"
+    dest: "{{promfriends_config_path}}/prometheus.yml"
+    owner: "{{prometheus_container_user}}"
+    group: "{{prometheus_container_group}}"
+    mode: "0660"
+  register: prom_config
+- include: "docker.yml"
+  context: "{{prometheus_docker_name}}"
+  image: "prom/prometheus:{{prometheus_version}}"
+  publish:
+  - "{{promfriends_docker_host}}:9090:9090"
+  volume:
+  - "{{promfriends_config_path}}:/etc/prometheus"
+  - "{{prometheus_data_path}}:/prometheus"
+  changed: prom_config.config
