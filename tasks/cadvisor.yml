@@ -8,6 +8,8 @@
   - "/var/lib/docker/:/var/lib/docker:ro"
   - "/var/run:/var/run:rw"
   - "/:/rootfs:ro"
+  labels:
+    nolog: "true"
 - name: "detect cadvisor exporter ip address"
   command: >
     docker inspect --format \{\{.NetworkSettings.IPAddress\}\} cadvisor

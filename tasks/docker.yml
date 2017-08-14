@@ -23,6 +23,7 @@
     capabilities: "{{caps|default(omit)}}"
     env: "{{use_env|default(omit)}}"
     dns_servers: "{{promfriends_dns_servers|default(omit)}}"
+    labels: "{{labels|default(omit)}}"    
   when: >
     (container_check.rc == 1 or
     container_check.stdout == "false" or
