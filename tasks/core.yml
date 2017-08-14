@@ -14,4 +14,4 @@
   volume:
   - "{{promfriends_config_path}}:/etc/prometheus"
   - "{{prometheus_data_path}}:/prometheus"
-  changed: prom_config.config
+  changed: "{{prom_config.changed}}"

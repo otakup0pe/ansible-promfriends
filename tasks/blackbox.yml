@@ -9,7 +9,7 @@
   use_command: "-config.file=/blackbox.yml"
   volume:
   - "{{promfriends_config_path}}/blackbox.yml:/blackbox.yml"
-  changed: blackbox_config.changed
+  changed: "{{blackbox_config.changed}}"
 - name: "detect blackbox exporter ip"
   command: >
     docker inspect --format \{\{.NetworkSettings.IPAddress\}\} prom_blackbox

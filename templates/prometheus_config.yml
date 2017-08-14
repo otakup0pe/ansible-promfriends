@@ -6,6 +6,18 @@ scrape_configs:
   static_configs:
   - targets:
       - "localhost:9090"
+{% for promfriend in promfriends_extras|default([]) %}
+- job_name: "{{promfriend.name}}"
+  static_configs:
+    - targets:
+        - "{{promfriend.target}}"
+{% if promfriend.path|default('') != '' %}
+  metrics_path: "{{promfriend.path}}"
+{% endif %}
+{% if promfriend.interval|default('') != '' %}
+  scrape_interval: "{{promfriend.interval}}"
+{% endif %}
+{% endfor %}
 {% if "collectd" in promfriends_contexts -%}
 - job_name: "collectd"
   static_configs:
@@ -14,7 +26,7 @@ scrape_configs:
 {% endif -%}
 {% if "cloudwatch" in promfriends_contexts -%}
 - job_name: "cloudwatch"
-  scrape_interval: 4h
+  scrape_interval: 1h
   static_configs:
     - targets:
 {% for cw in promfriends_cloudwatch_ips.results %}

@@ -15,7 +15,7 @@
   use_env:
     AWS_SECRET_ACCESS_KEY: "{{promcw_aws_secret}}"
     AWS_ACCESS_KEY_ID: "{{promcw_aws_key}}"
-  changed: item.changed
+  changed: "{{item.changed}}"
   with_items: "{{pfcwc_config.results}}"
 - name: "detect cloduwatch exporter ips"
   command: >
