@@ -14,4 +14,9 @@
   volume:
   - "{{promfriends_config_path}}:/etc/prometheus"
   - "{{prometheus_data_path}}:/prometheus"
+  use_command: >
+    -storage.local.retention={{prometheus_retention_time}}
+    -storage.local.series-file-shrink-ratio={{prometheus_file_shrink_ratio}}
+    -config.file=/etc/prometheus/prometheus.yml
+    -storage.local.path=/prometheus
   changed: "{{prom_config.changed}}"

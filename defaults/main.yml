@@ -13,6 +13,8 @@ prometheus_container_group: "docker"
 prometheus_docker_name: "prometheus"
 prometheus_version: "latest"
 prometheus_scrape_interval: "15s"
+prometheus_retention_time: "336h"
+prometheus_file_shrunk_ratio: "0.1"
 
 # Configuration for SNMP Prometheus exporter
 promsnmp_v2_community: "public"
