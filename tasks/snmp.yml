@@ -1,3 +1,4 @@
+---
 - name: "generate snmp exporter configuration"
   template:
     src: "snmp.yml"
@@ -11,10 +12,10 @@
   image: "prom/snmp-exporter"
   with_command: "-config.file=/snmp.yml"
   volume:
-  - "{{promfriends_config_path}}/snmp.yml:/etc/snmp_exporter/snmp.yml"
+    - "{{promfriends_config_path}}/snmp.yml:/etc/snmp_exporter/snmp.yml"
   changed: "{{snmp_config.changed}}"
 - name: "detect snmp exporter ip address"
   command: >
     docker inspect --format \{\{.NetworkSettings.IPAddress\}\} prom_snmp
   register: promfriends_snmp_ip
-  changed_when: no
+  changed_when: false

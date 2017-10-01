@@ -39,6 +39,12 @@ scrape_configs:
   - targets:
      - "{{promfriends_cadvisor_ip.stdout}}:8080"
 {% endif -%}
+{% if "statsd" in promfriends_contexts -%}
+- job_name: 'statsd'
+  static_configs:
+  - targets:
+     - "{{promfriends_statsd_ip.stdout}}:9102"
+{% endif -%}
 {% if "snmp" in promfriends_contexts -%}
 {% for snmp in promfriends_snmp_configs -%}
 - job_name: "snmp_{{snmp.name}}"
@@ -88,5 +94,11 @@ scrape_configs:
       regex: .*
       target_label: __address__
       replacement: "{{promfriends_blackbox_ip.stdout}}:9115"  # Blackbox exporter.
+{% endfor %}
+{% endif -%}
+{% if promfriends_rule_files|default([])|length > 0 -%}
+rule_files:
+{% for rule_file in promfriends_rule_files|default([]) %}
+{{'  '}}- "{{rule_file}}"
 {% endfor %}
 {% endif -%}

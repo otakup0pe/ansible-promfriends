@@ -1,0 +1,6 @@
+{% for map in promstatsd_mappings %}
+{{map.match}}
+{% for label, val in map.labels.iteritems() %}
+{{label}}="{{val}}"
+{% endfor %}
+{% endfor %}

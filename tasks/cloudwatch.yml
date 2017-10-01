@@ -1,3 +1,4 @@
+---
 - name: "generate cloduwatch exporter configuration"
   template:
     src: '{{promfriends_config|default("cloudwatch.yml")}}'
@@ -11,7 +12,7 @@
   context: "prom_cloudwatch-{{item.item.region}}"
   image: "prom/cloudwatch-exporter"
   volume:
-  - "{{promfriends_config_path}}/cloudwatch-{{item.item.region}}.yml:/config.yml"
+    - "{{promfriends_config_path}}/cloudwatch-{{item.item.region}}.yml:/config.yml"
   use_env:
     AWS_SECRET_ACCESS_KEY: "{{promcw_aws_secret}}"
     AWS_ACCESS_KEY_ID: "{{promcw_aws_key}}"
@@ -22,5 +23,5 @@
     docker inspect --format \{\{.NetworkSettings.IPAddress\}\}
     prom_cloudwatch-{{item.region}}
   with_items: "{{promcw_config}}"
-  changed_when: no
+  changed_when: false
   register: promfriends_cloudwatch_ips

@@ -1,29 +1,31 @@
+---
 - name: "check for promfriend {{context}}"
   command: >
     docker inspect --format \{\{.State.Running\}\} {{context}}
-  ignore_errors: True
-  changed_when: no
+  ignore_errors: true
+  changed_when: false
   register: container_check
 - name: "run container {{context}}"
-  become: no
+  become: false
   delegate_to: 'localhost'
   docker_container:
     name: "{{context}}"
     docker_host: "tcp://{{promfriends_docker_host}}:2376"
     cacert_path: "{{promfriends_docker_cacert_path}}"
     key_path: "{{promfriends_docker_key_path}}"
-    cert_path:  "{{promfriends_docker_cert_path}}"
+    cert_path: "{{promfriends_docker_cert_path}}"
     tls_hostname: "{{promfriends_docker_host}}"
-    tls: yes
+    tls: true
     recreate: "yes"
     published_ports: "{{publish|default(omit)}}"
+    pull: true
     image: "{{image}}"
     command: "{{use_command|default(omit)}}"
     volumes: "{{volume|default(omit)}}"
     capabilities: "{{caps|default(omit)}}"
     env: "{{use_env|default(omit)}}"
     dns_servers: "{{promfriends_dns_servers|default(omit)}}"
-    labels: "{{labels|default(omit)}}"    
+    labels: "{{labels|default(omit)}}"
   when: >
     (container_check.rc == 1 or
     container_check.stdout == "false" or

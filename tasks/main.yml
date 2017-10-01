@@ -1,3 +1,4 @@
+---
 - name: "enuse prometheus config path exists"
   file:
     path: "{{promfriends_config_path}}"
@@ -22,4 +23,6 @@
   when: '"cloudwatch" in promfriends_contexts'
 - include: "blackbox.yml"
   when: '"blackbox" in promfriends_contexts'
+- include: "statsd.yml"
+  when: '"statsd" in promfriends_contexts'
 - include: "core.yml"

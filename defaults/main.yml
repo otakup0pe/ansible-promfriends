@@ -1,9 +1,13 @@
+---
 # Configuration specific to the promfriends role
 promfriends_context: "noop"
 promfriends_docker_host: "tcp://{{lookup('dig', ansible_fqdn)}}:2376"
-promfriends_docker_cacert_path: "{{lookup('env', 'HOME') + '/.docker/machines/machine/local/ca.pem"
-promfriends_docker_key_path: "{{lookup('env', 'HOME') + '/.docker/machines/machine/local/key.pem"
-promfriends_docker_cert_path: "{{lookup('env', 'HOME') + '/.docker/machines/machine/local/cert.pem"
+promfriends_docker_cacert_path: >
+  {{lookup('env', 'HOME') + '/.docker/machines/machine/local/ca.pem
+promfriends_docker_key_path: >
+  {{lookup('env', 'HOME') + '/.docker/machines/machine/local/key.pem
+promfriends_docker_cert_path: >
+  {{lookup('env', 'HOME') + '/.docker/machines/machine/local/cert.pem
 promfriends_config_path: "/opt/prometheus/etc"
 
 # Configuration for Prometheus itself
@@ -22,4 +26,6 @@ promsnmp_v1_community: "public"
 
 # Configuration for the Cloudwatch Exporter
 promcw_config:
-- region: "us-east-1"
+  - region: "us-east-1"
+
+promstatsd_ip: "127.0.0.1"
