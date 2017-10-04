@@ -2,13 +2,15 @@ modules:
   http_alive:
     prober: http
     timeout: 10s
-    valid_status_codes: []
+    http:
+      valid_status_codes: []
   https_invalid_alive:
     prober: http
     timeout: 10s
-    protocol: "tcp4"
-    tls_config:
-      insecure_skip_verify: true
+    http:
+      preferred_ip_protocol: "ip4"
+      tls_config:
+        insecure_skip_verify: true
   pinger:
     prober: icmp
     timeout: 3s

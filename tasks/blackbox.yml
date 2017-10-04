@@ -7,7 +7,7 @@
 - include: "docker.yml"
   context: "prom_blackbox"
   image: "prom/blackbox-exporter"
-  use_command: "-config.file=/blackbox.yml"
+  use_command: "--config.file=/blackbox.yml"
   volume:
     - "{{promfriends_config_path}}/blackbox.yml:/blackbox.yml"
   changed: "{{blackbox_config.changed}}"
