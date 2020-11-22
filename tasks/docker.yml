@@ -1,7 +1,12 @@
 ---
 - name: "check for promfriend {{context}}"
   command: >
-    docker inspect --format \{\{.State.Running\}\} {{context}}
+    docker -H tcp://{{promfriends_docker_host}}:2376
+    --tlscert {{promfriends_docker_cert_path}}
+    --tlskey {{promfriends_docker_key_path}}
+    --tlscacert {{promfriends_docker_cacert_path}}
+    --tlsverify
+    inspect --format \{\{.State.Running\}\} {{context}}
   ignore_errors: true
   changed_when: false
   register: container_check
