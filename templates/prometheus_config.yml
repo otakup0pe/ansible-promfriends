@@ -1,3 +1,4 @@
+---
 global:
   scrape_interval: "{{prometheus_scrape_interval}}"
 
@@ -18,12 +19,6 @@ scrape_configs:
   scrape_interval: "{{promfriend.interval}}"
 {% endif %}
 {% endfor %}
-{% if "collectd" in promfriends_contexts -%}
-- job_name: "collectd"
-  static_configs:
-  - targets:
-      - "{{promfriends_collectd_ip.stdout}}:9103"
-{% endif -%}
 {% if "cloudwatch" in promfriends_contexts -%}
 - job_name: "cloudwatch"
   scrape_interval: 1h

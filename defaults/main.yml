@@ -1,6 +1,5 @@
 ---
-# Configuration specific to the promfriends role
-promfriends_context: "noop"
+# Configuration shared throughout the promfriends role
 promfriends_docker_host: "tcp://{{lookup('dig', ansible_fqdn)}}:2376"
 promfriends_docker_cacert_path: >
   {{lookup('env', 'HOME') + '/.docker/machines/machine/local/ca.pem
@@ -9,11 +8,11 @@ promfriends_docker_key_path: >
 promfriends_docker_cert_path: >
   {{lookup('env', 'HOME') + '/.docker/machines/machine/local/cert.pem
 promfriends_config_path: "/opt/prometheus/etc"
+prometheus_container_user: "docker"
+prometheus_container_group: "docker"
 
 # Configuration for Prometheus itself
 prometheus_data_path: "/opt/prometheus/data"
-prometheus_container_user: "docker"
-prometheus_container_group: "docker"
 prometheus_docker_name: "prometheus"
 prometheus_version: "latest"
 prometheus_scrape_interval: "15s"
