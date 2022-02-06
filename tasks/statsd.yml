@@ -7,17 +7,20 @@
     group: "{{prometheus_container_group}}"
     mode: "0660"
   register: statsd_config
+
 - include: "docker.yml"
-  context: "prom_statsd"
-  image: "prom/statsd-exporter"
-  use_command: >
-    -statsd.mapping-config /statsd.yml
-    -statsd.listen-address :8125
-  volume:
-    - "{{promfriends_config_path}}/statsd.yml:/statsd.yml"
-  changed: "{{statsd_config.changed}}"
-  publish:
-    - "8125:8125/udp"
+  vars:
+    context: "prom_statsd"
+    image: "prom/statsd-exporter"
+    use_command: >
+      -statsd.mapping-config /statsd.yml
+      -statsd.listen-address :8125
+    volume:
+      - "{{promfriends_config_path}}/statsd.yml:/statsd.yml"
+    changed: "{{statsd_config.changed}}"
+    publish:
+      - "8125:8125/udp"
+
 - name: "detect statsd exporter ip address"
   command: >
     docker inspect --format \{\{.NetworkSettings.IPAddress\}\} prom_statsd

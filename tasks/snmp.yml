@@ -7,13 +7,16 @@
     group: "{{prometheus_container_group}}"
     mode: "0660"
   register: snmp_config
-- include: "docker.yml"
-  context: "prom_snmp"
-  image: "prom/snmp-exporter"
-  with_command: "-config.file=/snmp.yml"
-  volume:
-    - "{{promfriends_config_path}}/snmp.yml:/etc/snmp_exporter/snmp.yml"
-  changed: "{{snmp_config.changed}}"
+
+- include_tasks: "docker.yml"
+  vars:
+    context: "prom_snmp"
+    image: "prom/snmp-exporter"
+    with_command: "-config.file=/snmp.yml"
+    volume:
+      - "{{promfriends_config_path}}/snmp.yml:/etc/snmp_exporter/snmp.yml"
+    changed: "{{snmp_config.changed}}"
+
 - name: "detect snmp exporter ip address"
   command: >
     docker inspect --format \{\{.NetworkSettings.IPAddress\}\} prom_snmp

@@ -1,4 +1,3 @@
 ---
 promfriends_directories:
   - "{{promfriends_config_path}}"
-  - "{{promfriends_data_path}}"

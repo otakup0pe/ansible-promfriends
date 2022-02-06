@@ -63,7 +63,7 @@ scrape_configs:
 {% endfor %}
 {% endif -%}
 {% if "blackbox" in promfriends_contexts -%}
-{% for bb in promfriends_blackbox_configs -%}
+{% for bb in promfriends_blackbox_configs|default([]) -%}
 - job_name: "blackbox_{{bb.name}}"
 {% if bb.scrape_interval|default(0) != 0 %}
   scrape_interval: "{{bb.scrape_interval}}"

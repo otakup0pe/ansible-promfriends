@@ -1,5 +1,7 @@
 ---
 - name: "check for promfriend {{context}}"
+  delegate_to: "localhost"
+  become: false
   command: >
     docker -H tcp://{{promfriends_docker_host}}:2376
     --tlscert {{promfriends_docker_cert_path}}
@@ -10,17 +12,17 @@
   ignore_errors: true
   changed_when: false
   register: container_check
+
 - name: "run container {{context}}"
   become: false
-  delegate_to: 'localhost'
+  delegate_to: "localhost"
   docker_container:
     name: "{{context}}"
     docker_host: "tcp://{{promfriends_docker_host}}:2376"
-    cacert_path: "{{promfriends_docker_cacert_path}}"
-    key_path: "{{promfriends_docker_key_path}}"
-    cert_path: "{{promfriends_docker_cert_path}}"
+    ca_cert: "{{promfriends_docker_cacert_path}}"
+    client_key: "{{promfriends_docker_key_path}}"
+    client_cert: "{{promfriends_docker_cert_path}}"
     tls_hostname: "{{promfriends_docker_host}}"
-    tls: true
     recreate: "yes"
     published_ports: "{{publish|default(omit)}}"
     pull: true
@@ -31,6 +33,9 @@
     env: "{{use_env|default(omit)}}"
     dns_servers: "{{promfriends_dns_servers|default(omit)}}"
     labels: "{{labels|default(omit)}}"
+    validate_certs: true
+    ssl_version: "TLS"  # whut
+    user: "{{user|default(omit)}}"
   when: >
     (container_check.rc == 1 or
     container_check.stdout == "false" or

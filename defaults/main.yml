@@ -1,12 +1,12 @@
 ---
 # Configuration shared throughout the promfriends role
-promfriends_docker_host: "tcp://{{lookup('dig', ansible_fqdn)}}:2376"
+promfriends_docker_host: "{{ansible_fqdn}}"
 promfriends_docker_cacert_path: >
-  {{lookup('env', 'HOME') + '/.docker/machines/machine/local/ca.pem
+  {{lookup('env', 'HOME') + '/.docker/machines/machine/local/ca.pem'}}
 promfriends_docker_key_path: >
-  {{lookup('env', 'HOME') + '/.docker/machines/machine/local/key.pem
+  {{lookup('env', 'HOME') + '/.docker/machines/machine/local/key.pem'}}
 promfriends_docker_cert_path: >
-  {{lookup('env', 'HOME') + '/.docker/machines/machine/local/cert.pem
+  {{lookup('env', 'HOME') + '/.docker/machines/machine/local/cert.pem'}}
 promfriends_config_path: "/opt/prometheus/etc"
 prometheus_container_user: "docker"
 prometheus_container_group: "docker"
@@ -17,7 +17,7 @@ prometheus_docker_name: "prometheus"
 prometheus_version: "latest"
 prometheus_scrape_interval: "15s"
 prometheus_retention_time: "336h"
-prometheus_file_shrunk_ratio: "0.1"
+prometheus_file_shrink_ratio: "0.1"
 
 # Configuration for SNMP Prometheus exporter
 promsnmp_v2_community: "public"

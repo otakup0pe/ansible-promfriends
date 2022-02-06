@@ -1,23 +1,44 @@
 ---
+- name: "create data dir with proper perms"
+  file:
+    path: "{{prometheus_data_path}}"
+    owner: "{{prometheus_container_user}}"
+    group: "{{prometheus_container_group}}"
+    mode: "0770"
+
 - name: "generate prometheus configuration"
   template:
-    src: "prometheus_config.yml"
+    src: "prometheus_config.yml.j2"
     dest: "{{promfriends_config_path}}/prometheus.yml"
     owner: "{{prometheus_container_user}}"
     group: "{{prometheus_container_group}}"
     mode: "0660"
   register: prom_config
-- include: "docker.yml"
-  context: "{{prometheus_docker_name}}"
-  image: "prom/prometheus:{{prometheus_version}}"
-  publish:
-    - "{{promfriends_docker_host}}:9090:9090"
-  volume:
-    - "{{promfriends_config_path}}:/etc/prometheus"
-    - "{{prometheus_data_path}}:/prometheus"
-  use_command: >
-    -storage.local.retention={{prometheus_retention_time}}
-    -storage.local.series-file-shrink-ratio={{prometheus_file_shrink_ratio}}
-    -config.file=/etc/prometheus/prometheus.yml
-    -storage.local.path=/prometheus
-  changed: "{{prom_config.changed}}"
+
+- name: "get user id"
+  getent:
+    database: "passwd"
+    key: "{{prometheus_container_user}}"
+
+- name: "get group id"
+  getent:
+    database: "group"
+    key: "{{prometheus_container_group}}"
+
+- include_tasks: "docker.yml"
+  vars:
+    context: "{{prometheus_docker_name}}"
+    image: "prom/prometheus:{{prometheus_version}}"
+    publish:
+      - "{{lookup('dig', promfriends_docker_host)}}:9090:9090"
+    volume:
+      - "{{promfriends_config_path}}:/etc/prometheus"
+      - "{{prometheus_data_path}}:/prometheus"
+    use_command: >
+      --storage.tsdb.retention={{prometheus_retention_time}}
+      --config.file=/etc/prometheus/prometheus.yml
+      --storage.tsdb.path=/prometheus
+    changed: "{{prom_config.changed}}"
+    user: |
+      {{getent_passwd[prometheus_container_user][1]}}
+      :{{getent_group[prometheus_container_group][2]}}
