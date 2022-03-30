@@ -36,6 +36,7 @@
     validate_certs: true
     ssl_version: "TLS"  # whut
     user: "{{user|default(omit)}}"
+    groups: "{{container_groups|default(omit)}}"
   when: >
     (container_check.rc == 1 or
     container_check.stdout == "false" or
