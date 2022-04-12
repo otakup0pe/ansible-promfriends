@@ -18,6 +18,7 @@ prometheus_version: "latest"
 prometheus_scrape_interval: "15s"
 prometheus_retention_time: "336h"
 prometheus_file_shrink_ratio: "0.1"
+prometheus_log_level: "info"
 
 # Configuration for SNMP Prometheus exporter
 promsnmp_v2_community: "public"

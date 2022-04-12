@@ -23,7 +23,9 @@
     client_key: "{{promfriends_docker_key_path}}"
     client_cert: "{{promfriends_docker_cert_path}}"
     tls_hostname: "{{promfriends_docker_host}}"
-    recreate: "yes"
+    comparisons:
+      "*": "strict"
+    recreate: true
     published_ports: "{{publish|default(omit)}}"
     pull: true
     image: "{{image}}"
@@ -35,9 +37,10 @@
     labels: "{{labels|default(omit)}}"
     validate_certs: true
     ssl_version: "TLS"  # whut
-    user: "{{user|default(omit)}}"
-    groups: "{{container_groups|default(omit)}}"
+    user: "{{user|default(prometheus_container_uid)}}"
+    groups: "{{[prometheus_container_gid] + container_groups|default([])}}"
   when: >
     (container_check.rc == 1 or
     container_check.stdout == "false" or
+    promfriends_web_config.changed or
     changed|default(False))

@@ -7,3 +7,28 @@
     mode: "0770"
     state: "directory"
   with_items: "{{promfriends_directories}}"
+
+- name: "generate web config"
+  template:
+    src: "web_config.yml.j2"
+    dest: "{{promfriends_config_path}}/web_config.yml"
+    owner: "{{prometheus_container_user}}"
+    group: "{{prometheus_container_group}}"
+    mode: "0660"
+  register: promfriends_web_config
+
+- name: "lookup prometheus usid"
+  getent:
+    database: "passwd"
+    key: "{{prometheus_container_user}}"
+
+- set_fact:
+    prometheus_container_uid: "{{getent_passwd[prometheus_container_user][1]}}"
+
+- name: "get group id"
+  getent:
+    database: "group"
+    key: "{{prometheus_container_group}}"
+
+- set_fact:
+    prometheus_container_gid: "{{getent_group[prometheus_container_group][1]}}"

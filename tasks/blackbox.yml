@@ -3,16 +3,25 @@
   template:
     src: '{{promfriends_config|default("blackbox.yml")}}'
     dest: "{{promfriends_config_path}}/blackbox.yml"
+    owner: "{{prometheus_container_user}}"
+    group: "{{prometheus_container_group}}"
+    mode: "0660"
   register: blackbox_config
 
 - include_tasks: "docker.yml"
   vars:
     context: "prom_blackbox"
     image: "prom/blackbox-exporter"
-    use_command: "--config.file=/blackbox.yml"
+    use_command: "--config.file=/blackbox.yml --web.config.file=/web_config.yml"
     volume:
-      - "{{promfriends_config_path}}/blackbox.yml:/blackbox.yml"
+      - "{{promfriends_config_path}}/blackbox.yml:/blackbox.yml:ro"
+      - "{{promfriends_config_path}}/web_config.yml:/web_config.yml:ro"
+      - "{{promfriends_config_path}}/server.crt:/server.crt:ro"
+      - "{{promfriends_config_path}}/server.key:/server.key:ro"
+      - "{{promfriends_config_path}}/ca.crt:/ca.crt:ro"
     changed: "{{blackbox_config.changed}}"
+    publish:
+      - "{{ansible_default_ipv4.address}}:9115:9115"
 
 - name: "detect blackbox exporter ip"
   command: >

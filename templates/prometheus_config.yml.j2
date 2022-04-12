@@ -19,26 +19,11 @@ scrape_configs:
   scrape_interval: "{{promfriend.interval}}"
 {% endif %}
 {% endfor %}
-{% if "cloudwatch" in promfriends_contexts -%}
-- job_name: "cloudwatch"
-  scrape_interval: 1h
-  static_configs:
-    - targets:
-{% for cw in promfriends_cloudwatch_ips.results %}
-      - "{{cw.stdout}}:9106"
-{% endfor %}
-{% endif -%}
 {% if "cadvisor" in promfriends_contexts -%}
 - job_name: 'cadvisor'
   static_configs:
   - targets:
      - "{{promfriends_cadvisor_ip.stdout}}:8080"
-{% endif -%}
-{% if "statsd" in promfriends_contexts -%}
-- job_name: 'statsd'
-  static_configs:
-  - targets:
-     - "{{promfriends_statsd_ip.stdout}}:9102"
 {% endif -%}
 {% if "snmp" in promfriends_contexts -%}
 {% for snmp in promfriends_snmp_configs -%}

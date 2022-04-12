@@ -9,22 +9,12 @@
 
 - name: "generate prometheus configuration"
   template:
-    src: "prometheus_config.yml.j2"
+    src: "prometheus.yml.j2"
     dest: "{{promfriends_config_path}}/prometheus.yml"
     owner: "{{prometheus_container_user}}"
     group: "{{prometheus_container_group}}"
     mode: "0660"
   register: prom_config
-
-- name: "get user id"
-  getent:
-    database: "passwd"
-    key: "{{prometheus_container_user}}"
-
-- name: "get group id"
-  getent:
-    database: "group"
-    key: "{{prometheus_container_group}}"
 
 - include_tasks: "docker.yml"
   vars:
@@ -33,12 +23,16 @@
     publish:
       - "{{ansible_default_ipv4.address}}:9090:9090"
     volume:
-      - "{{promfriends_config_path}}:/etc/prometheus"
+      - "{{promfriends_config_path}}:/etc/prometheus:ro"
       - "{{prometheus_data_path}}:/prometheus"
+      - "{{promfriends_config_path}}/web_config.yml:/web_config.yml:ro"
+      - "{{promfriends_config_path}}/server.crt:/server.crt:ro"
+      - "{{promfriends_config_path}}/server.key:/server.key:ro"
+      - "{{promfriends_config_path}}/ca.crt:/ca.crt:ro"
     use_command: >
       --storage.tsdb.retention={{prometheus_retention_time}}
       --config.file=/etc/prometheus/prometheus.yml
       --storage.tsdb.path=/prometheus
+      --web.config.file=/web_config.yml
+      --log.level={{prometheus_log_level}}
     changed: "{{prom_config.changed}}"
-    container_groups:
-      - "{{getent_group[prometheus_container_group][1]}}"

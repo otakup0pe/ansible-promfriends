@@ -2,11 +2,7 @@
 - include: "base.yml"
 - include: "snmp.yml"
   when: '"snmp" in promfriends_contexts|default([])'
-- include: "cloudwatch.yml"
-  when: '"cloudwatch" in promfriends_contexts|default([])'
 - include: "blackbox.yml"
   when: '"blackbox" in promfriends_contexts|default([])'
-- include: "statsd.yml"
-  when: '"statsd" in promfriends_contexts|default([])'
 - include: "core.yml"
   when: '"core" in promfriends_contexts|default([])'
