@@ -36,3 +36,16 @@
       --web.config.file=/web_config.yml
       --log.level={{prometheus_log_level}}
     changed: "{{prom_config.changed}}"
+
+- name: "ensure prometheus container is running"
+  delegate_to: "localhost"
+  become: false
+  uri:
+    url: "https://{{inventory_hostname}}:9090/"
+    ca_path: "{{promfriends_docker_cacert_path}}"
+    client_cert: "{{promfriends_docker_cert_path}}"
+    client_key: "{{promfriends_docker_key_path}}"
+  register: core_status
+  until: core_status.status == 200
+  retries: 5
+  delay: 10

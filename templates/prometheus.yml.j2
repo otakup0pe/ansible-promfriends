@@ -3,6 +3,6 @@ global:
   scrape_interval: "{{prometheus_scrape_interval}}"
 
 scrape_configs:
-{% for scrape in promfriends_scrapes %}
-{{'  '}}{{scrape | to_nice_yaml(indent=2,sort_keys=False) | indent(2, False) }}
+{% for scrape in prometheus_scrapes %}
+{{'  '}}- {{scrape | to_nice_yaml(indent=4,sort_keys=False) | indent(4, False) }}
 {% endfor %}

@@ -8,10 +8,10 @@ promfriends_docker_key_path: >
 promfriends_docker_cert_path: >
   {{lookup('env', 'HOME') + '/.docker/machines/machine/local/cert.pem'}}
 promfriends_config_path: "/opt/prometheus/etc"
-prometheus_container_user: "docker"
-prometheus_container_group: "docker"
 
 # Configuration for Prometheus itself
+prometheus_container_user: "docker"
+prometheus_container_group: "docker"
 prometheus_data_path: "/opt/prometheus/data"
 prometheus_docker_name: "prometheus"
 prometheus_version: "latest"
@@ -19,7 +19,11 @@ prometheus_scrape_interval: "15s"
 prometheus_retention_time: "336h"
 prometheus_file_shrink_ratio: "0.1"
 prometheus_log_level: "info"
-
+prometheus_scrapes:
+  - job_name: "prometheus"
+    scrape_interval: 60s
+    static_configs:
+      - targets: ["{{inventory_hostname}}:9090"]
 # Configuration for SNMP Prometheus exporter
 promsnmp_v2_community: "public"
 promsnmp_v1_community: "public"
