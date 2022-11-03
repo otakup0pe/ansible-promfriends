@@ -1,4 +1,12 @@
 ---
+- name: "create cache directory"
+  delegate_to: "localhost"
+  become: false
+  file:
+    path: "{{promfriends_cache_path}}"
+    state: "directory"
+    mode: "0700"
+
 - name: "create common directories"
   file:
     path: "{{item}}"
@@ -8,7 +16,7 @@
     state: "directory"
   with_items: "{{promfriends_directories}}"
 
-- name: "generate web config"
+- name: "generate container web config"
   template:
     src: "web_config.yml.j2"
     dest: "{{promfriends_config_path}}/web_config.yml"
@@ -16,6 +24,13 @@
     group: "{{prometheus_container_group}}"
     mode: "0660"
   register: promfriends_web_config
+  vars:
+    cert: "/server.crt"
+    key: "/server.key"
+    ca: "/ca.crt"
+  when: >-
+    "core" in prometheus_contexts|default('')
+    or "blackbox" in prometheus_contexts|default('')
 
 - name: "lookup prometheus usid"
   getent:

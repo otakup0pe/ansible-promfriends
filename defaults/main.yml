@@ -8,6 +8,9 @@ promfriends_docker_key_path: >
 promfriends_docker_cert_path: >
   {{lookup('env', 'HOME') + '/.docker/machines/machine/local/cert.pem'}}
 promfriends_config_path: "/opt/prometheus/etc"
+promfriends_cache_path: >-
+  {{lookup('env', 'HOME') + '/.cache/ansible-promfriends'}}
+promfriends_sites: {}
 
 # Configuration for Prometheus itself
 prometheus_container_user: "docker"
@@ -19,17 +22,63 @@ prometheus_scrape_interval: "15s"
 prometheus_retention_time: "336h"
 prometheus_file_shrink_ratio: "0.1"
 prometheus_log_level: "info"
+prometheus_port: "9090"
+prometheus_address: "0.0.0.0"
 prometheus_scrapes:
   - job_name: "prometheus"
     scrape_interval: 60s
+    scheme: "https"
+    tls_config:
+      ca_file: "/ca.crt"
+      cert_file: "/server.crt"
+      key_file: "/server.key"
+      server_name: "{{inventory_hostname}}"
     static_configs:
-      - targets: ["{{inventory_hostname}}:9090"]
+      - targets: ["{{inventory_hostname}}:{{prometheus_port}}"]
+
+prometheus_publish:
+  - "{{prometheus_address}}:{{prometheus_port}}:{{prometheus_port}}"
+
 # Configuration for SNMP Prometheus exporter
 promsnmp_v2_community: "public"
 promsnmp_v1_community: "public"
 
-# Configuration for the Cloudwatch Exporter
-promcw_config:
-  - region: "us-east-1"
-
 promstatsd_ip: "127.0.0.1"
+
+prombb_config: "blackbox.yml.j2"
+prombb_port: "9115"
+
+prombb_publish:
+  - "{{prometheus_address}}:{{prombb_port}}:{{prombb_port}}"
+
+promnode_version: "1.4.0"
+promnode_group: "prometheus"
+promnode_binary_path: "/usr/local/bin"
+promnode_cache_path: "{{promfriends_cache_path}}"
+promnode_text_path: "/var/run/promnode/textfiles"
+promnode_disabled:
+  - "arp"
+  - "bcache"
+  - "bonding"
+  - "btrfs"
+  - "fibrechannel"
+  - "infiniband"
+  - "ipvs"
+  - "netclass"
+  - "nfs"
+  - "nfsd"
+  - "nvme"
+  - "pressure"
+  - "rapl"
+  - "schedstat"
+  - "selinux"
+  - "tapestats"
+  - "timex"
+  - "udp_queues"
+  - "xfs"
+  - "zfs"
+promnode_enabled:
+  - textfile:
+      directory: "{{promnode_text_path}}"
+  - processes
+promnode_port: 9100

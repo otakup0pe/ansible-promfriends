@@ -1,0 +1,114 @@
+---
+- name: "set arm7l vars"
+  set_fact:
+    promnode_url: "{{promnode_url_prefix}}/{{promnode_arm7l_file}}"
+    promnode_file: "{{promnode_arm7l_file}}"
+    promnode_archive: "{{promnode_cache_path}}/{{promnode_arm7l_file}}"
+    promnode_binary: "{{promnode_binary_prefix}}-armv7/node_exporter"
+  when: ansible_architecture == "armv7l"
+
+- name: "set amd64 vars"
+  set_fact:
+    promnode_url: "{{promnode_url_prefix}}/{{promnode_amd64_file}}"
+    promnode_file: "{{promnode_amd64_file}}"
+    promnode_archive: "{{promnode_cache_path}}/{{promnode_amd64_file}}"
+    promnode_binary: "{{promnode_binary_prefix}}-amd64/node_exporter"
+  when: ansible_architecture == "x86_64"
+
+- name: "check for supported arch"
+  fail:
+    msg: "unsupported arch"
+  when: promnode_url|default('') == ''
+
+- name: "ensure node exporter gruop"
+  group:
+    name: "{{promnode_group}}"
+    state: "present"
+
+- name: "create textfiles path"
+  file:
+    path: "{{promnode_text_path}}"
+    owner: "root"
+    group: "{{promnode_group}}"
+    state: "directory"
+    mode: "0770"
+
+- name: "fetch node exporter"
+  get_url:
+    url: "{{promnode_url}}"
+    dest: "{{promnode_archive}}"
+    owner: "root"
+    group: "{{promnode_group}}"
+    mode: "0700"
+
+- name: "extract node exporter"
+  unarchive:
+    src: "{{promnode_archive}}"
+    remote_src: true
+    dest: "{{promnode_cache_path}}"
+    creates: "{{promnode_binary}}"
+
+- name: "copy node exporter binary"
+  copy:
+    remote_src: true
+    force: true
+    src: "{{promnode_binary}}"
+    dest: "{{promnode_bin}}"
+    owner: "root"
+    group: "{{promnode_group}}"
+    mode: "0770"
+  register: promnode_binary_copy
+
+- name: "generate web config"
+  template:
+    src: "web_config.yml.j2"
+    dest: "/opt/prometheus/etc/node_exporter-web_config.yml"
+    owner: "root"
+    group: "{{promnode_group}}"
+  vars:
+    cert: "{{promfriends_config_path}}/server.crt"
+    key: "{{promfriends_config_path}}/server.key"
+    ca: "{{promfriends_config_path}}/ca.crt"
+  register: promnode_web_config
+
+- debug:
+    var: promnode_enabled
+
+- name: "generate node exporter systemd config"
+  template:
+    src: "node_exporter.service.j2"
+    dest: "/etc/systemd/system/node_exporter.service"
+    owner: "root"
+    group: "root"
+    mode: "0644"
+  register: promnode_systemd
+
+- name: "start node exporter"
+  systemd:
+    daemon_reload: true
+    name: "node_exporter"
+    enabled: true
+    state: "started"
+  register: promnode_started
+
+- name: "restart node exporter"
+  systemd:
+    daemon_reload: true
+    name: "node_exporter"
+    state: "restarted"
+  when: >-
+    not promnode_started.changed and
+      (promnode_systemd.changed
+      or promnode_web_config.changed
+      or promnode_binary_copy.changed)
+
+- name: "ensure node exporter is running"
+  uri:
+    url: "https://{{inventory_hostname}}:{{promnode_port}}/"
+    ca_path: "{{promfriends_config_path}}/ca.crt"
+    client_cert: "{{promfriends_config_path}}/server.crt"
+    client_key: "{{promfriends_config_path}}/server.key"
+  register: core_status
+  until: core_status.status == 200
+  retries: 6
+  delay: 5

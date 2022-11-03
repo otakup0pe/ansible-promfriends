@@ -27,6 +27,7 @@
       "*": "strict"
     recreate: true
     published_ports: "{{publish|default(omit)}}"
+    restart_policy: "unless-stopped"
     pull: true
     image: "{{image}}"
     command: "{{use_command|default(omit)}}"
@@ -39,7 +40,6 @@
     ssl_version: "TLS"  # whut
     user: "{{user|default(prometheus_container_uid)}}"
     groups: "{{[prometheus_container_gid] + container_groups|default([])}}"
-    network_mode: "host"
   when: >
     (container_check.rc == 1 or
     container_check.stdout == "false" or

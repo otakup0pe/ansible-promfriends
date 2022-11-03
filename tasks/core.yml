@@ -7,6 +7,43 @@
     mode: "0770"
     state: "directory"
 
+- name: "render site scrape configs"
+  delegate_to: "localhost"
+  become: false
+  template:
+    src: "{{item.template}}"
+    dest: "{{promfriends_cache_path}}/{{inventory_hostname}}\
+    -{{item.template|basename}}"
+    mode: "0600"
+    vars: "{{item.vars|default(omit)}}"
+  register: promfriends_site_rendered
+  loop: "{{promfriends_site_configs}}"
+
+- name: "load site scrape configs"
+  include_vars:
+    file: "{{item.dest}}"
+    name: "promfriends_scrape_tmp"
+  loop: "{{promfriends_site_rendered.results}}"
+  register: promfriends_loaded_configs
+
+- debug:
+    var: promfriends_loaded_configs.results
+
+- set_fact:
+    promfriends_sites: "{{promfriends_loaded_configs.results \
+    | json_query('[].[ansible_facts.promfriends_scrape_tmp] | [].scrapes')}}"
+
+- debug:
+    var: promfriends_sites
+
+- name: "set sites based config structure"
+  set_fact:
+    prometheus_scrapes: "{{lookup('flattened', promfriends_sites)}}"
+  when: promfriends_sites|length > 0
+
+- debug:
+    var: prometheus_scrapes
+
 - name: "generate prometheus configuration"
   template:
     src: "prometheus.yml.j2"
@@ -20,8 +57,7 @@
   vars:
     context: "{{prometheus_docker_name}}"
     image: "prom/prometheus:{{prometheus_version}}"
-    publish:
-      - "{{ansible_default_ipv4.address}}:9090:9090"
+    publish: "{{prometheus_publish}}"
     volume:
       - "{{promfriends_config_path}}:/etc/prometheus:ro"
       - "{{prometheus_data_path}}:/prometheus"
@@ -35,17 +71,16 @@
       --storage.tsdb.path=/prometheus
       --web.config.file=/web_config.yml
       --log.level={{prometheus_log_level}}
+      --web.listen-address={{prometheus_address}}:{{prometheus_port}}
     changed: "{{prom_config.changed}}"
 
 - name: "ensure prometheus container is running"
-  delegate_to: "localhost"
-  become: false
   uri:
-    url: "https://{{inventory_hostname}}:9090/"
-    ca_path: "{{promfriends_docker_cacert_path}}"
-    client_cert: "{{promfriends_docker_cert_path}}"
-    client_key: "{{promfriends_docker_key_path}}"
+    url: "https://{{inventory_hostname}}:{{prometheus_port}}/"
+    ca_path: "{{promfriends_config_path}}/ca.crt"
+    client_cert: "{{promfriends_config_path}}/server.crt"
+    client_key: "{{promfriends_config_path}}/server.key"
   register: core_status
   until: core_status.status == 200
-  retries: 5
-  delay: 10
+  retries: 60
+  delay: 5

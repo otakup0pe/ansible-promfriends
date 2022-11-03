@@ -1,3 +1,11 @@
 ---
 promfriends_directories:
   - "{{promfriends_config_path}}"
+  - "{{promnode_cache_path}}"
+
+promnode_url_prefix: "https://github.com/prometheus/node_exporter/releases/download/v{{promnode_version}}/"
+promnode_file_prefix: "node_exporter-{{promnode_version}}.linux"
+promnode_amd64_file: "{{promnode_file_prefix}}-amd64.tar.gz"
+promnode_arm7l_file: "{{promnode_file_prefix}}-armv7.tar.gz"
+promnode_binary_prefix: "{{promnode_cache_path}}/{{promnode_file_prefix}}"
+promnode_bin: "{{promnode_binary_path}}/node_exporter"

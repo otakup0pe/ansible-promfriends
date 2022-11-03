@@ -1,3 +1,4 @@
+---
 modules:
   http_alive:
     prober: http

@@ -1,7 +1,7 @@
 ---
 - name: "generate blackbox config"
   template:
-    src: '{{promfriends_config|default("blackbox.yml")}}'
+    src: "{{prombb_config}}"
     dest: "{{promfriends_config_path}}/blackbox.yml"
     owner: "{{prometheus_container_user}}"
     group: "{{prometheus_container_group}}"
@@ -12,7 +12,10 @@
   vars:
     context: "prom_blackbox"
     image: "prom/blackbox-exporter"
-    use_command: "--config.file=/blackbox.yml --web.config.file=/web_config.yml"
+    use_command: >
+      --config.file=/blackbox.yml
+      --web.config.file=/web_config.yml
+      --web.listen-address={{prometheus_address}}:{{prombb_port}}
     volume:
       - "{{promfriends_config_path}}/blackbox.yml:/blackbox.yml:ro"
       - "{{promfriends_config_path}}/web_config.yml:/web_config.yml:ro"
@@ -20,8 +23,7 @@
       - "{{promfriends_config_path}}/server.key:/server.key:ro"
       - "{{promfriends_config_path}}/ca.crt:/ca.crt:ro"
     changed: "{{blackbox_config.changed}}"
-    publish:
-      - "{{ansible_default_ipv4.address}}:9115:9115"
+    publish: "{{prombb_publish}}"
 
 - name: "detect blackbox exporter ip"
   command: >
@@ -29,3 +31,14 @@
   ignore_errors: true
   register: promfriends_blackbox_ip
   changed_when: false
+
+- name: "ensure blackbox container is running"
+  uri:
+    url: "https://{{inventory_hostname}}:9115/"
+    ca_path: "{{promfriends_config_path}}/ca.crt"
+    client_cert: "{{promfriends_config_path}}/server.crt"
+    client_key: "{{promfriends_config_path}}/server.key"
+  register: core_status
+  until: core_status.status == 200
+  retries: 5
+  delay: 10

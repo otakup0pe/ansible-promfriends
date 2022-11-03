@@ -7,5 +7,8 @@
 - include: "blackbox.yml"
   when: '"blackbox" in promfriends_contexts|default([])'
 
+- include: "node.yml"
+  when: '"node" in promfriends_contexts|default([])'
+
 - include: "core.yml"
   when: '"core" in promfriends_contexts|default([])'

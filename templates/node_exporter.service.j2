@@ -1,0 +1,35 @@
+# {{ansible_managed}}
+
+[Unit]
+Description=PromNode
+After=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group={{promnode_group}}
+ExecStart={{promnode_bin}} \
+{% for collector in promnode_disabled %}
+{{'    '}}--no-collector.{{collector}} \
+{% endfor %}
+{% for collector in promnode_enabled %}
+{% if collector is mapping %}
+{%     set name, opts = (collector.items()|list)[0] -%}
+{{'    '}}--collector.{{name}} \
+{% for k, v in opts.items() %}
+{{'    '}}--collector.{{name}}.{{k}}={{v|quote}} \
+{% endfor %}
+{% else %}
+{{'    '}}--collector.{{collector}} \
+{% endif %}
+{% endfor %}
+    --web.config=/opt/prometheus/etc/node_exporter-web_config.yml \
+    --web.listen-address=0.0.0.0:{{promnode_port}}
+
+SyslogIdentifier=node_exporter
+Restart=always
+RestartSec=1
+StartLimitInterval=0
+
+[Install]
+WantedBy=multi-user.target
