@@ -11,6 +11,8 @@ promfriends_config_path: "/opt/prometheus/etc"
 promfriends_cache_path: >-
   {{lookup('env', 'HOME') + '/.cache/ansible-promfriends'}}
 promfriends_sites: {}
+promfriends_certs_changed: false
+promfriends_logdriver: "json"  # or journald or whatever
 
 # Configuration for Prometheus itself
 prometheus_container_user: "docker"

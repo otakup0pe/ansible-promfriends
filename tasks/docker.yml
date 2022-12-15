@@ -40,6 +40,8 @@
     ssl_version: "TLS"  # whut
     user: "{{user|default(prometheus_container_uid)}}"
     groups: "{{[prometheus_container_gid] + container_groups|default([])}}"
+    log_driver: "{{promfriends_logdriver}}"
+    log_options: "{{promfriends_logoptions}}"
   when: >
     (container_check.rc == 1 or
     container_check.stdout == "false" or

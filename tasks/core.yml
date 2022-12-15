@@ -72,7 +72,7 @@
       --web.config.file=/web_config.yml
       --log.level={{prometheus_log_level}}
       --web.listen-address={{prometheus_address}}:{{prometheus_port}}
-    changed: "{{prom_config.changed}}"
+    changed: "{{prom_config.changed or promfriends_certs_changed}}"
 
 - name: "ensure prometheus container is running"
   uri:

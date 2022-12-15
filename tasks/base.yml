@@ -7,6 +7,11 @@
     state: "directory"
     mode: "0700"
 
+- name: "ensure user/group exists"
+  user:
+    name: "{{prometheus_container_user}}"
+    group: "{{prometheus_container_group}}"
+
 - name: "create common directories"
   file:
     path: "{{item}}"
