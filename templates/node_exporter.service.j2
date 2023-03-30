@@ -8,6 +8,7 @@ After=network-online.target
 Type=simple
 User=root
 Group={{promnode_group}}
+ExecStartPre=mkdir -p {{promnode_text_path}}
 ExecStart={{promnode_bin}} \
 {% for collector in promnode_disabled %}
 {{'    '}}--no-collector.{{collector}} \

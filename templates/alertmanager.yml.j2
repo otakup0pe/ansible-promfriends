@@ -1,0 +1,29 @@
+---  # -*-YAML-*- {{ansible_managed}}
+global:
+  smtp_smarthost: "{{alertmanager_smtp_host}}:{{alertmanager_smtp_port}}"
+  smtp_from: "{{alertmanager_smtp_from}}"
+  smtp_auth_username: "{{alertmanager_smtp_user}}"
+  smtp_auth_password: "{{alertmanager_smtp_password}}"
+
+receivers:
+{{'  '}}- name: "eeeemail"
+{{'    '}}email_configs:
+{{'      '}}- send_resolved: true
+{{'        '}}to: "{{alertmanager_default_email}}"
+{% for receiver in alertmanager_receivers -%}
+{{'  '}}- {{receiver | to_nice_yaml(indent=4, sort_keys=False) | indent(4, False)}}
+{% endfor %}
+
+route:
+  repeat_interval: "{{alertmanager_repeat_interval}}"
+  receiver: "eeeemail"
+  group_by:
+{% for group in alertmanager_group_by -%}
+{{'    '}}- "{{group}}"
+{% endfor %}
+{% if alertmanager_routes|length > 0 -%}
+{{'  '}}routes:
+{% for route in alertmanager_routes -%}
+{{'    '}}- {{route | to_nice_yaml(indent=6, sort_keys=False) | indent(6, False)}}
+{% endfor %}
+{% endif %}

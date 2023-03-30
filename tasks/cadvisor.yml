@@ -1,20 +1,43 @@
 ---
+- name: "get group id"
+  getent:
+    database: "group"
+    key: "{{cadvisor_docker_group}}"
+
+- set_fact:
+    cadvisor_docker_gid: "{{getent_group[cadvisor_docker_group][1]}}"
+
 - include_tasks: "docker.yml"
   vars:
     context: "cadvisor"
-    image: "google/cadvisor"
+    image: "{{cadvisor_image}}"
+    privileged: true
+    user: "root"
+    use_devices:
+      - "/dev/kmsg:/dev/kmsg:ro"
     publish:
-      - "{{promfriends_docker_host}}:8080:8080"
+      - "127.0.0.1:{{cadvisor_port}}:{{cadvisor_port}}"
     volume:
+      - "/:/rootfs:ro"
+      - "/run/docker.sock:/run/docker.sock:ro"
       - "/sys:/sys:ro"
       - "/var/lib/docker/:/var/lib/docker:ro"
-      - "/var/run:/var/run:rw"
-      - "/:/rootfs:ro"
-    labels:
-  nolog: "true"
+      - "/dev/disk/:/dev/disk:ro"
+      - "/sys/fs/cgroup:/sys/fs/cgroup:ro"
+      - "/etc/machine-id:/etc/machine-id:ro"
+    container_groups:
+      - "{{cadvisor_docker_gid}}"
+    use_command:
+      - "--logtostderr=true"
+      - "--http_auth_realm={{inventory_hostname}}"
+      - "--port={{cadvisor_port}}"
+    use_env:
+      CADVISOR_HEALTHCHECK_URL: "http://localhost:{{cadvisor_port}}/healthz"
 
-- name: "detect cadvisor exporter ip address"
-  command: >
-    docker inspect --format \{\{.NetworkSettings.IPAddress\}\} cadvisor
-  register: promfriends_cadvisor_ip
-  changed_when: false
+- name: "ensure cadvisor container is running"
+  uri:
+    url: "http://{{inventory_hostname}}:{{cadvisor_port}}/"
+  register: cadvisor_status
+  until: cadvisor_status.status == 200
+  retries: 5
+  delay: 10

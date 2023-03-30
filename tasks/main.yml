@@ -7,8 +7,14 @@
 - include: "blackbox.yml"
   when: '"blackbox" in promfriends_contexts|default([])'
 
+- include: "cadvisor.yml"
+  when: '"cadvisor" in promfriends_contexts|default([])'
+
 - include: "node.yml"
   when: '"node" in promfriends_contexts|default([])'
+
+- include: "alerts.yml"
+  when: '"alerts" in promfriends_contexts|default([])'
 
 - include: "core.yml"
   when: '"core" in promfriends_contexts|default([])'

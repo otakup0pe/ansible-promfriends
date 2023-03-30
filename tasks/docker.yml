@@ -1,17 +1,25 @@
 ---
-- name: "check for promfriend {{context}}"
-  delegate_to: "localhost"
+- name: "get container information"
   become: false
-  command: >
-    docker -H tcp://{{promfriends_docker_host}}:2376
-    --tlscert {{promfriends_docker_cert_path}}
-    --tlskey {{promfriends_docker_key_path}}
-    --tlscacert {{promfriends_docker_cacert_path}}
-    --tlsverify
-    inspect --format \{\{.State.Running\}\} {{context}}
-  ignore_errors: true
-  changed_when: false
-  register: container_check
+  delegate_to: "localhost"
+  docker_container_info:
+    name: "{{context}}"
+    tls: true
+    ca_cert: "{{yopo_docker_cacert_path}}"
+    client_key: "{{yopo_docker_key_path}}"
+    client_cert: "{{yopo_docker_cert_path}}"
+    tls_hostname: "{{inventory_hostname}}"
+    validate_certs: true
+    ssl_version: "TLS"  # whut
+    docker_host: "tcp://{{inventory_hostname}}:2376"
+  register: promfriend_container_info
+  no_log: "{{yopo_debug|default('') != 'true'}}"
+
+- set_fact:
+    promfriend_container_running: "{{promfriend_container_info.container\
+    ['State']['Running']|default(False)|bool}}"
+    promfriend_running_image: "{{promfriend_container_info.container\
+    ['Config']['Image']|default('')|trim}}"
 
 - name: "run container {{context}}"
   become: false
@@ -28,7 +36,9 @@
     recreate: true
     published_ports: "{{publish|default(omit)}}"
     restart_policy: "unless-stopped"
+    privileged: "{{privileged|default(False)}}"
     pull: true
+    devices: "{{use_devices|default(omit)}}"
     image: "{{image}}"
     command: "{{use_command|default(omit)}}"
     volumes: "{{volume|default(omit)}}"
@@ -43,7 +53,6 @@
     log_driver: "{{promfriends_logdriver}}"
     log_options: "{{promfriends_logoptions}}"
   when: >
-    (container_check.rc == 1 or
-    container_check.stdout == "false" or
-    promfriends_web_config.changed or
-    changed|default(False))
+    (not promfriend_container_running)
+    or promfriend_running_image != image
+    or changed|default(False)

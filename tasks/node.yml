@@ -71,9 +71,6 @@
     ca: "{{promfriends_config_path}}/ca.crt"
   register: promnode_web_config
 
-- debug:
-    var: promnode_enabled
-
 - name: "generate node exporter systemd config"
   template:
     src: "node_exporter.service.j2"
@@ -97,10 +94,11 @@
     name: "node_exporter"
     state: "restarted"
   when: >-
-    not promnode_started.changed and
+    (not promnode_started.changed) and
       (promnode_systemd.changed
       or promnode_web_config.changed
-      or promnode_binary_copy.changed)
+      or promnode_binary_copy.changed
+      or promfriends_certs_changed)
 
 - name: "ensure node exporter is running"
   uri:

@@ -1,6 +1,6 @@
----
-Voila sont les dragons.
----
+![Voila sont les dragons](images/dragons.png)
+
+*Here Be Dragons* ![Maintenance](https://img.shields.io/maintenance/yes/2023.svg)
 
 # Buncha Prometheus YAML
 
@@ -9,12 +9,13 @@ This is the Ansible role I use to do things with Prometheus. It is super opinion
 It supports the following contexts
 
 * Prometheus itself
-* Prometheus Collectd exporter
-* Prometheus SNMP exporter
-* CAdvisor
-* Prometheus CloudWatch Exporter
+* Alertmanager
+* Node Exporter (non-containerized)
 * Prometheus Blackbox Exporter
+* CAdvisor
+* Prometheus SNMP exporter
+* Prometheus CloudWatch Exporter
 
 # About the Author
 
-[Jonathan Freedman](http://jonathanfreedman.bio/) has opinions about monitoring.
+[Jonathan Freedman](http://jonathanfreedman.bio/), Resiliency Technical.

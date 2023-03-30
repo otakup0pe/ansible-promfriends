@@ -11,7 +11,7 @@
 - include_tasks: "docker.yml"
   vars:
     context: "prom_blackbox"
-    image: "prom/blackbox-exporter"
+    image: "{{prombb_image}}"
     use_command: >
       --config.file=/blackbox.yml
       --web.config.file=/web_config.yml
@@ -22,15 +22,8 @@
       - "{{promfriends_config_path}}/server.crt:/server.crt:ro"
       - "{{promfriends_config_path}}/server.key:/server.key:ro"
       - "{{promfriends_config_path}}/ca.crt:/ca.crt:ro"
-    changed: "{{blackbox_config.changed}}"
+    changed: "{{blackbox_config.changed or promfriends_certs_changed}}"
     publish: "{{prombb_publish}}"
-
-- name: "detect blackbox exporter ip"
-  command: >
-    docker inspect --format \{\{.NetworkSettings.IPAddress\}\} prom_blackbox
-  ignore_errors: true
-  register: promfriends_blackbox_ip
-  changed_when: false
 
 - name: "ensure blackbox container is running"
   uri:

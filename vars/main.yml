@@ -9,3 +9,10 @@ promnode_amd64_file: "{{promnode_file_prefix}}-amd64.tar.gz"
 promnode_arm7l_file: "{{promnode_file_prefix}}-armv7.tar.gz"
 promnode_binary_prefix: "{{promnode_cache_path}}/{{promnode_file_prefix}}"
 promnode_bin: "{{promnode_binary_path}}/node_exporter"
+
+cadvisor_image: "gcr.io/cadvisor/cadvisor:v{{cadvisor_version}}"
+prometheus_image: "prom/prometheus:v{{prometheus_version}}"
+
+prombb_image: "prom/blackbox-exporter:v{{prombb_version}}"
+
+alertmanager_image: "prom/alertmanager:v{{alertmanager_version}}"

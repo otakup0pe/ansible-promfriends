@@ -26,23 +26,36 @@
   loop: "{{promfriends_site_rendered.results}}"
   register: promfriends_loaded_configs
 
-- debug:
-    var: promfriends_loaded_configs.results
-
-- set_fact:
-    promfriends_sites: "{{promfriends_loaded_configs.results \
+- name: "parse out dynamic configs"
+  set_fact:
+    promfriends_site_scrapes: "{{promfriends_loaded_configs.results \
     | json_query('[].[ansible_facts.promfriends_scrape_tmp] | [].scrapes')}}"
 
-- debug:
-    var: promfriends_sites
-
-- name: "set sites based config structure"
+- name: "set sites based scrape structure"
   set_fact:
-    prometheus_scrapes: "{{lookup('flattened', promfriends_sites)}}"
-  when: promfriends_sites|length > 0
+    prometheus_scrapes: "{{lookup('flattened', promfriends_site_scrapes)}}"
+  when: promfriends_site_scrapes|length > 0
 
-- debug:
-    var: prometheus_scrapes
+- name: "generate rule files"
+  template:
+    src: "{{item.template}}"
+    dest: "{{promfriends_config_path}}/{{(item.template|basename|splitext)[0]}}\
+    _rule.yml"
+    owner: "{{prometheus_container_user}}"
+    group: "{{prometheus_container_group}}"
+    mode: "0660"
+  loop: "{{promfriends_rule_configs}}"
+  when: item.state|default('present') == 'present'
+  register: promfriends_update_rules
+
+- name: "remove rule files"
+  file:
+    path: "{{promfriends_config_path}}/{{(item.template|basename|splitext)[0]}}\
+    _rule.yml"
+    state: "absent"
+  loop: "{{promfriends_rule_configs}}"
+  when: item.state|default('present') == 'absent'
+  register: promfriends_remove_rules
 
 - name: "generate prometheus configuration"
   template:
@@ -56,7 +69,7 @@
 - include_tasks: "docker.yml"
   vars:
     context: "{{prometheus_docker_name}}"
-    image: "prom/prometheus:{{prometheus_version}}"
+    image: "{{prometheus_image}}"
     publish: "{{prometheus_publish}}"
     volume:
       - "{{promfriends_config_path}}:/etc/prometheus:ro"
@@ -72,7 +85,11 @@
       --web.config.file=/web_config.yml
       --log.level={{prometheus_log_level}}
       --web.listen-address={{prometheus_address}}:{{prometheus_port}}
-    changed: "{{prom_config.changed or promfriends_certs_changed}}"
+    changed: "{{prom_config.changed \
+    or promfriends_certs_changed \
+    or promfriends_web_config.changed \
+    or promfriends_update_rules.changed \
+    or promfriends_remove_rules.changed}}"
 
 - name: "ensure prometheus container is running"
   uri:

@@ -19,7 +19,7 @@ prometheus_container_user: "docker"
 prometheus_container_group: "docker"
 prometheus_data_path: "/opt/prometheus/data"
 prometheus_docker_name: "prometheus"
-prometheus_version: "latest"
+prometheus_version: "2.43.0"
 prometheus_scrape_interval: "15s"
 prometheus_retention_time: "336h"
 prometheus_file_shrink_ratio: "0.1"
@@ -49,6 +49,7 @@ promstatsd_ip: "127.0.0.1"
 
 prombb_config: "blackbox.yml.j2"
 prombb_port: "9115"
+prombb_version: "0.23.0"
 
 prombb_publish:
   - "{{prometheus_address}}:{{prombb_port}}:{{prombb_port}}"
@@ -84,3 +85,20 @@ promnode_enabled:
       directory: "{{promnode_text_path}}"
   - processes
 promnode_port: 9100
+
+alertmanager_smtp_port: "465"
+alertmanager_receivers: []
+alertmanager_routes: []
+alertmanager_repeat_interval: "24h"
+alertmanager_group_by:
+  - "alertname"
+alertmanager_version: "0.25.0"
+alertmanager_data_path: "/opt/prometheus/alertmanager"
+alertmanager_retention: "120h"
+alertmanager_port: "9093"
+alertmanager_publish:
+  - "{{prometheus_address}}:{{alertmanager_port}}:{{alertmanager_port}}"
+
+cadvisor_version: "0.47.1"
+cadvisor_port: "9980"
+cadvisor_docker_group: "docker"
