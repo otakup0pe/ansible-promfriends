@@ -8,7 +8,7 @@
     mode: "0660"
   register: statsd_config
 
-- include: "docker.yml"
+- include_tasks: "docker.yml"
   vars:
     context: "prom_statsd"
     image: "prom/statsd-exporter"

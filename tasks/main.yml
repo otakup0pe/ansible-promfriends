@@ -1,20 +1,20 @@
 ---
-- include: "base.yml"
+- include_tasks: "base.yml"
 
-- include: "snmp.yml"
+- include_tasks: "snmp.yml"
   when: '"snmp" in promfriends_contexts|default([])'
 
-- include: "blackbox.yml"
+- include_tasks: "blackbox.yml"
   when: '"blackbox" in promfriends_contexts|default([])'
 
-- include: "cadvisor.yml"
+- include_tasks: "cadvisor.yml"
   when: '"cadvisor" in promfriends_contexts|default([])'
 
-- include: "node.yml"
+- include_tasks: "node.yml"
   when: '"node" in promfriends_contexts|default([])'
 
-- include: "alerts.yml"
+- include_tasks: "alerts.yml"
   when: '"alerts" in promfriends_contexts|default([])'
 
-- include: "core.yml"
+- include_tasks: "core.yml"
   when: '"core" in promfriends_contexts|default([])'
