@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# docker promtool wrapper
+
+set -e
+
+problems() {
+    >&2 echo "problem: ${1}"
+    exit 1
+}
+
+ACTION="$1"
+shift
+if [ -z "$1" ] ; then
+    problems "invalid args"
+fi
+CHECK_FILE="$1"
+if [ ! -e "$CHECK_FILE" ] ; then
+    problems "unable to find ${CHECK_FILE}"
+fi
+
+if [ "$ACTION" == "check-config" ] ; then
+    CMD="check config"
+elif [ "$ACTION" == "check-web-config" ] ; then
+    CMD="check web-config"
+elif [ "$ACTION" == "check-rules" ] ; then
+    CMD="check rules"
+else
+    problem "invalid args"
+fi
+docker run \
+       --user "$(id -u)" \
+       --entrypoint /bin/promtool \
+       -v "${CHECK_FILE}:/check.yml" \
+       -v "{{promfriends_config_path}}:/etc/prometheus:ro" \
+       -v "{{promfriends_config_path}}/server.crt:/server.crt:ro" \
+       -v "{{promfriends_config_path}}/server.key:/server.key:ro" \
+       -v "{{promfriends_config_path}}/ca.crt:/ca.crt:ro" \
+       "{{prometheus_image}}" \
+       $CMD /check.yml

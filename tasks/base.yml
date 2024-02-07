@@ -21,6 +21,14 @@
     state: "directory"
   with_items: "{{promfriends_directories}}"
 
+- name: "install promtool wrapper"
+  template:
+    src: "promtool-wrapper.sh.j2"
+    dest: "{{promfriends_bin_path}}/promtool-wrapper"
+    owner: "{{prometheus_container_user}}"
+    group: "{{prometheus_container_group}}"
+    mode: "0770"
+
 - name: "generate container web config"
   template:
     src: "web_config.yml.j2"
@@ -28,6 +36,7 @@
     owner: "{{prometheus_container_user}}"
     group: "{{prometheus_container_group}}"
     mode: "0660"
+    validate: "/opt/prometheus/bin/promtool-wrapper check-web-config %s"
   register: promfriends_web_config
   vars:
     cert: "/server.crt"

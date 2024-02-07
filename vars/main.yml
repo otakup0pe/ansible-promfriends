@@ -1,5 +1,6 @@
 ---
 promfriends_directories:
+  - "{{promfriends_bin_path}}"
   - "{{promfriends_config_path}}"
   - "{{promnode_cache_path}}"
 

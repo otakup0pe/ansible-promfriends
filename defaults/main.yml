@@ -8,6 +8,7 @@ promfriends_docker_key_path: >
 promfriends_docker_cert_path: >
   {{lookup('env', 'HOME') + '/.docker/machines/machine/local/cert.pem'}}
 promfriends_config_path: "/opt/prometheus/etc"
+promfriends_bin_path: "/opt/prometheus/bin"
 promfriends_cache_path: >-
   {{lookup('env', 'HOME') + '/.cache/ansible-promfriends'}}
 promfriends_sites: {}

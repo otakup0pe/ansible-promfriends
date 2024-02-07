@@ -36,6 +36,16 @@
     prometheus_scrapes: "{{lookup('flattened', promfriends_site_scrapes)}}"
   when: promfriends_site_scrapes|length > 0
 
+- name: "generate prometheus configuration"
+  template:
+    src: "prometheus.yml.j2"
+    dest: "{{promfriends_config_path}}/prometheus.yml"
+    owner: "{{prometheus_container_user}}"
+    group: "{{prometheus_container_group}}"
+    mode: "0660"
+    validate: "/opt/prometheus/bin/promtool-wrapper check-config %s"
+  register: prom_config
+
 - name: "generate rule files"
   template:
     src: "{{item.template}}"
@@ -44,6 +54,7 @@
     owner: "{{prometheus_container_user}}"
     group: "{{prometheus_container_group}}"
     mode: "0660"
+    validate: "/opt/prometheus/bin/promtool-wrapper check-rules %s"
   loop: "{{promfriends_rule_configs}}"
   when: item.state|default('present') == 'present'
   register: promfriends_update_rules
@@ -56,15 +67,6 @@
   loop: "{{promfriends_rule_configs}}"
   when: item.state|default('present') == 'absent'
   register: promfriends_remove_rules
-
-- name: "generate prometheus configuration"
-  template:
-    src: "prometheus.yml.j2"
-    dest: "{{promfriends_config_path}}/prometheus.yml"
-    owner: "{{prometheus_container_user}}"
-    group: "{{prometheus_container_group}}"
-    mode: "0660"
-  register: prom_config
 
 - include_tasks: "docker.yml"
   vars:
