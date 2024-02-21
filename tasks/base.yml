@@ -43,8 +43,8 @@
     key: "/server.key"
     ca: "/ca.crt"
   when: >-
-    "core" in prometheus_contexts|default('')
-    or "blackbox" in prometheus_contexts|default('')
+    "core" in promfriends_contexts|default('')
+    or "blackbox" in promfriends_contexts|default('')
 
 - name: "lookup prometheus usid"
   getent:

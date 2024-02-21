@@ -84,8 +84,8 @@
   systemd:
     daemon_reload: true
     name: "node_exporter"
-    enabled: true
-    state: "started"
+    enabled: "{{ 'true' if promnode_startup else 'false' }}"
+    state: "{{ 'started' if promnode_running else 'stopped' }}"
   register: promnode_started
 
 - name: "restart node exporter"
@@ -98,7 +98,8 @@
       (promnode_systemd.changed
       or promnode_web_config.changed
       or promnode_binary_copy.changed
-      or promfriends_certs_changed)
+      or promfriends_certs_changed) and
+    promnode_running
 
 - name: "ensure node exporter is running"
   uri:
@@ -110,3 +111,4 @@
   until: core_status.status == 200
   retries: 6
   delay: 5
+  when: promnode_running

@@ -87,6 +87,8 @@ promnode_enabled:
       directory: "{{promnode_text_path}}"
   - processes
 promnode_port: 9100
+promnode_running: true
+promnode_startup: true
 
 alertmanager_smtp_port: "465"
 alertmanager_receivers: []
