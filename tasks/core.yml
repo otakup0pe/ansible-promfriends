@@ -7,6 +7,15 @@
     mode: "0770"
     state: "directory"
 
+- name: "remove old site scrape config templates"
+  file:
+    path: "{{promfriends_cache_path}}/{{inventory_hostname}}\
+    -{{item.template|basename}}"
+    state: "absent"
+  loop: "{{promfriends_site_configs}}"
+  when: item.state|default('present') == 'absent'
+  register: promfriends_removed_configs
+
 - name: "render site scrape configs"
   delegate_to: "localhost"
   become: false
@@ -18,12 +27,14 @@
     vars: "{{item.vars|default(omit)}}"
   register: promfriends_site_rendered
   loop: "{{promfriends_site_configs}}"
+  when: item.state|default('present') == 'present'
 
 - name: "load site scrape configs"
   include_vars:
     file: "{{item.dest}}"
     name: "promfriends_scrape_tmp"
   loop: "{{promfriends_site_rendered.results}}"
+  when: item.item.state|default('present') == 'present'
   register: promfriends_loaded_configs
 
 - name: "parse out dynamic configs"
