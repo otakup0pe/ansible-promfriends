@@ -1,0 +1,26 @@
+---
+- include_tasks: "docker.yml"
+  vars:
+    context: "pushgateway"
+    image: "{{pushgateway_image}}"
+    use_command: >
+      --web.config.file=/web_config.yml
+      --web.listen-address={{pushgateway_address}}:{{pushgateway_port}}
+    volume:
+      - "{{promfriends_config_path}}/web_config.yml:/web_config.yml:ro"
+      - "{{promfriends_config_path}}/server.crt:/server.crt:ro"
+      - "{{promfriends_config_path}}/server.key:/server.key:ro"
+      - "{{promfriends_config_path}}/ca.crt:/ca.crt:ro"
+    changed: "{{promfriends_certs_changed}}"
+    publish: "{{pushgateway_publish}}"
+
+- name: "ensure push gateway container is running"
+  uri:
+    url: "https://{{inventory_hostname}}:{{pushgateway_port}}/-/ready"
+    ca_path: "{{promfriends_config_path}}/ca.crt"
+    client_cert: "{{promfriends_config_path}}/server.crt"
+    client_key: "{{promfriends_config_path}}/server.key"
+  register: core_status
+  until: core_status.status == 200
+  retries: 5
+  delay: 10

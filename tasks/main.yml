@@ -10,6 +10,9 @@
 - include_tasks: "cadvisor.yml"
   when: '"cadvisor" in promfriends_contexts|default([])'
 
+- include_tasks: "push.yml"
+  when: '"push" in promfriends_contexts|default([])'
+
 - include_tasks: "node.yml"
   when: '"node" in promfriends_contexts|default([])'
 

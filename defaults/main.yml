@@ -89,6 +89,7 @@ promnode_enabled:
 promnode_port: 9100
 promnode_running: true
 promnode_startup: true
+promnode_pkg_exporter: true
 
 alertmanager_smtp_port: "465"
 alertmanager_receivers: []
@@ -106,3 +107,9 @@ alertmanager_publish:
 cadvisor_version: "0.47.1"
 cadvisor_port: "9980"
 cadvisor_docker_group: "docker"
+
+pushgateway_version: "1.7.0"
+pushgateway_address: "{{prometheus_address}}"
+pushgateway_port: "9091"
+pushgateway_publish:
+  - "{{pushgateway_address}}:{{pushgateway_port}}:{{pushgateway_port}}"

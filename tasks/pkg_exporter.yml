@@ -1,0 +1,12 @@
+---
+- name: "install pkg-exporter pip"
+  pip:
+    name: "pkg-exporter"
+    state: "present"
+
+- name: "install pkg-exporter cron"
+  ansible.builtin.cron:
+    name: "promfriend node pkg-exporter"
+    minute: "0,15,30,45"
+    job: "PKG_EXPORTER_FILE={{promnode_text_path}}/pkg-exporter.prom\
+    /usr/local/bin/pkg-exporter"

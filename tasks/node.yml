@@ -112,3 +112,6 @@
   retries: 6
   delay: 5
   when: promnode_running
+
+- include_tasks: "pkg_exporter.yml"
+  when: promnode_pkg_exporter

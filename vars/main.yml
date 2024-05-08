@@ -17,3 +17,5 @@ prometheus_image: "prom/prometheus:v{{prometheus_version}}"
 prombb_image: "prom/blackbox-exporter:v{{prombb_version}}"
 
 alertmanager_image: "prom/alertmanager:v{{alertmanager_version}}"
+
+pushgateway_image: "prom/pushgateway:v{{pushgateway_version}}"
