@@ -2,6 +2,7 @@
 
 global:
   scrape_interval: "{{prometheus_scrape_interval}}"
+  scrape_timeout: "{{prometheus_scrape_timeout}}"
 
 scrape_configs:
 {% for scrape in prometheus_scrapes %}
