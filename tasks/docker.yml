@@ -10,7 +10,6 @@
     client_cert: "{{yopo_docker_cert_path}}"
     tls_hostname: "{{inventory_hostname}}"
     validate_certs: true
-    ssl_version: "TLS"  # whut
     docker_host: "tcp://{{inventory_hostname}}:2376"
   register: promfriend_container_info
   no_log: "{{yopo_debug|default('') != 'true'}}"
@@ -47,7 +46,6 @@
     dns_servers: "{{promfriends_dns_servers|default(omit)}}"
     labels: "{{labels|default(omit)}}"
     validate_certs: true
-    ssl_version: "TLS"  # whut
     user: "{{user|default(prometheus_container_uid)}}"
     groups: "{{[prometheus_container_gid] + container_groups|default([])}}"
     log_driver: "{{promfriends_logdriver}}"
