@@ -1,8 +1,20 @@
 ---
+# todo switch to uv if possible
+- name: "check if uv is available"
+  command: "which uv"
+  register: promfriends_uv_check
+  changed_when: false
+  ignore_errors: true
+
 - name: "install pkg-exporter pip"
   pip:
     name: "pkg-exporter"
     state: "present"
+  when: promfriends_uv_check.rc != 0
+
+- name: "install pkg-exporter via uv"
+  command: "uv tool install awscli"
+  when: promfriends_uv_check.rc == 0
 
 - name: "install pkg-exporter cron"
   ansible.builtin.cron:

@@ -12,10 +12,7 @@
   vars:
     context: "prom_blackbox"
     image: "{{prombb_image}}"
-    use_command: >
-      --config.file=/blackbox.yml
-      --web.config.file=/web_config.yml
-      --web.listen-address={{prometheus_address}}:{{prombb_port}}
+    use_command: "{{prombb_command}}"
     volume:
       - "{{promfriends_config_path}}/blackbox.yml:/blackbox.yml:ro"
       - "{{promfriends_config_path}}/web_config.yml:/web_config.yml:ro"

@@ -19,6 +19,8 @@
     ['State']['Running']|default(False)|bool}}"
     promfriend_running_image: "{{promfriend_container_info.container\
     ['Config']['Image']|default('')|trim}}"
+    promfriend_container_command: "{{promfriend_container_info.container\
+    ['Args'] | default([]) | join(' ')}}"
 
 - name: "run container {{context}}"
   become: false
@@ -53,4 +55,6 @@
   when: >
     (not promfriend_container_running)
     or promfriend_running_image != image
-    or changed|default(False)
+    or changed|default(False) or
+    ( use_command|default('') != ''
+    and promfriend_container_command != use_command )

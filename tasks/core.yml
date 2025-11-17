@@ -91,13 +91,7 @@
       - "{{promfriends_config_path}}/server.crt:/server.crt:ro"
       - "{{promfriends_config_path}}/server.key:/server.key:ro"
       - "{{promfriends_config_path}}/ca.crt:/ca.crt:ro"
-    use_command: >
-      --storage.tsdb.retention={{prometheus_retention_time}}
-      --config.file=/etc/prometheus/prometheus.yml
-      --storage.tsdb.path=/prometheus
-      --web.config.file=/web_config.yml
-      --log.level={{prometheus_log_level}}
-      --web.listen-address={{prometheus_address}}:{{prometheus_port}}
+    use_command: "{{prometheus_command}}"
     changed: "{{prom_config.changed \
     or promfriends_certs_changed \
     or promfriends_web_config.changed \

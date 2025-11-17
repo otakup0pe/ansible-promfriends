@@ -8,14 +8,31 @@ promnode_url_prefix: "https://github.com/prometheus/node_exporter/releases/downl
 promnode_file_prefix: "node_exporter-{{promnode_version}}.linux"
 promnode_amd64_file: "{{promnode_file_prefix}}-amd64.tar.gz"
 promnode_arm7l_file: "{{promnode_file_prefix}}-armv7.tar.gz"
+promnode_arm6l_file: "{{promnode_file_prefix}}-armv6.tar.gz"
 promnode_binary_prefix: "{{promnode_cache_path}}/{{promnode_file_prefix}}"
 promnode_bin: "{{promnode_binary_path}}/node_exporter"
 
 cadvisor_image: "gcr.io/cadvisor/cadvisor:v{{cadvisor_version}}"
 prometheus_image: "prom/prometheus:v{{prometheus_version}}"
+prometheus_command: >-
+  --storage.tsdb.retention={{prometheus_retention_time}}
+  --config.file=/etc/prometheus/prometheus.yml
+  --storage.tsdb.path=/prometheus
+  --web.config.file=/web_config.yml
+  --log.level={{prometheus_log_level}}
+  --web.listen-address={{prometheus_address}}:{{prometheus_port}}
 
 prombb_image: "prom/blackbox-exporter:v{{prombb_version}}"
+prombb_command: >-
+  --config.file=/blackbox.yml
+  --web.config.file=/web_config.yml
+  --web.listen-address={{prometheus_address}}:{{prombb_port}}
+  --log.level={{prombb_log}}
+  --log.prober={{prombb_probe_log}}
 
 alertmanager_image: "prom/alertmanager:v{{alertmanager_version}}"
 
 pushgateway_image: "prom/pushgateway:v{{pushgateway_version}}"
+pushgateway_command: >-
+  --web.config.file=/web_config.yml
+  --web.listen-address={{pushgateway_address}}:{{pushgateway_port}}
