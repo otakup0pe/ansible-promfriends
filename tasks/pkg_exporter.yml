@@ -13,7 +13,7 @@
   when: promfriends_uv_check.rc != 0
 
 - name: "install pkg-exporter via uv"
-  command: "uv tool install awscli"
+  command: "uv tool install pkg-exporter"
   when: promfriends_uv_check.rc == 0
 
 - name: "install pkg-exporter cron"
