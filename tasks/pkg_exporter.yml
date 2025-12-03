@@ -1,24 +1,42 @@
 ---
-# todo switch to uv if possible
-- name: "check if uv is available"
-  command: "which uv"
-  register: promfriends_uv_check
-  changed_when: false
-  ignore_errors: true
+- name: "Determine installation method (pipx vs pip)"
+  set_fact:
+    use_pipx: >-
+      {{
+        (ansible_distribution == 'Debian' and
+        ansible_distribution_major_version | int >= 12) or
+        (ansible_distribution == 'Ubuntu' and
+        ansible_distribution_version is version('23.04', '>='))
+      }}
+
+- block:
+    - name: "ensure pipx is installed"
+      package:
+        name: "pipx"
+        state: "present"
+
+    - name: "check if pkg-exporter is installed via pipx"
+      command: "pipx list --short"
+      register: pipx_list
+      changed_when: false
+      ignore_errors: true
+
+    - name: "install pkg-exporter via pipx"
+      command: "pipx install pkg-exporter --system-site-packages"
+      when: "'pkg-exporter' not in pipx_list.stdout"
+  when: use_pipx
 
 - name: "install pkg-exporter pip"
   pip:
     name: "pkg-exporter"
     state: "present"
-  when: promfriends_uv_check.rc != 0
-
-- name: "install pkg-exporter via uv"
-  command: "uv tool install pkg-exporter"
-  when: promfriends_uv_check.rc == 0
+  when: not use_pipx
 
 - name: "install pkg-exporter cron"
   ansible.builtin.cron:
     name: "promfriend node pkg-exporter"
     minute: "0,15,30,45"
-    job: "PKG_EXPORTER_FILE={{promnode_text_path}}/pkg-exporter.prom \
-    /usr/local/bin/pkg-exporter"
+    job: >
+      PKG_EXPORTER_FILE={{promnode_text_path}}/pkg-exporter.prom
+      {% if use_pipx %}/root/.local/bin/pkg-exporter{% else %}
+      /usr/local/bin/pkg-exporter{% endif %}
