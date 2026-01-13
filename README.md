@@ -1,6 +1,6 @@
 ![Voila sont les dragons](images/dragons.png)
 
-*Here Be Dragons* ![Maintenance](https://img.shields.io/maintenance/yes/2025.svg)
+*Here Be Dragons* ![Maintenance](https://img.shields.io/maintenance/yes/2026.svg)
 
 # Buncha Prometheus YAML
 
