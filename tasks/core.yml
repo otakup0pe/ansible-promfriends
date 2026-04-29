@@ -100,7 +100,7 @@
 
 - name: "ensure prometheus container is running"
   uri:
-    url: "https://{{inventory_hostname}}:{{prometheus_port}}/"
+    url: "https://{{inventory_hostname}}:{{prometheus_health_port | default(prometheus_port)}}/"
     ca_path: "{{promfriends_config_path}}/ca.crt"
     client_cert: "{{promfriends_config_path}}/server.crt"
     client_key: "{{promfriends_config_path}}/server.key"

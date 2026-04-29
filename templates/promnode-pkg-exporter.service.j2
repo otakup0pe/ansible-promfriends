@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+[Unit]
+Description=promfriend node pkg-exporter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=PKG_EXPORTER_FILE={{promnode_text_path}}/pkg-exporter.prom
+ExecStart={{promnode_pkg_exporter_install_path}}/bin/pkg-exporter

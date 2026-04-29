@@ -23,6 +23,14 @@
     promnode_binary: "{{promnode_binary_prefix}}-armv6/node_exporter"
   when: ansible_architecture == "armv6l"
 
+- name: "set arm64 vars"
+  set_fact:
+    promnode_url: "{{promnode_url_prefix}}/{{promnode_arm64_file}}"
+    promnode_file: "{{promnode_arm64_file}}"
+    promnode_archive: "{{promnode_cache_path}}/{{promnode_arm64_file}}"
+    promnode_binary: "{{promnode_binary_prefix}}-arm64/node_exporter"
+  when: ansible_architecture == "aarch64"
+
 - name: "check for supported arch"
   fail:
     msg: "unsupported arch {{ ansible_architecture }}"

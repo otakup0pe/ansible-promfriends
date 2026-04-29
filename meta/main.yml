@@ -1,5 +1,8 @@
 ---
-dependencies: []
+dependencies:
+  - role: "ANXS.python"
+    python_uv_install: true
+    when: promnode_pkg_exporter | default(true)
 galaxy_info:
   author: Jonathan Freedman
   license: MIT

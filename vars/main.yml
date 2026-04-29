@@ -9,13 +9,14 @@ promnode_file_prefix: "node_exporter-{{promnode_version}}.linux"
 promnode_amd64_file: "{{promnode_file_prefix}}-amd64.tar.gz"
 promnode_arm7l_file: "{{promnode_file_prefix}}-armv7.tar.gz"
 promnode_arm6l_file: "{{promnode_file_prefix}}-armv6.tar.gz"
+promnode_arm64_file: "{{promnode_file_prefix}}-arm64.tar.gz"
 promnode_binary_prefix: "{{promnode_cache_path}}/{{promnode_file_prefix}}"
 promnode_bin: "{{promnode_binary_path}}/node_exporter"
 
 cadvisor_image: "gcr.io/cadvisor/cadvisor:v{{cadvisor_version}}"
 prometheus_image: "prom/prometheus:v{{prometheus_version}}"
 prometheus_command: >-
-  --storage.tsdb.retention={{prometheus_retention_time}}
+  --storage.tsdb.retention.time={{prometheus_retention_time}}
   --config.file=/etc/prometheus/prometheus.yml
   --storage.tsdb.path=/prometheus
   --web.config.file=/web_config.yml

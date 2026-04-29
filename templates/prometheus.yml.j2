@@ -22,5 +22,5 @@ alerting:
         key_file: "/server.key"
       static_configs:
         - targets:
-            - "{{inventory_hostname}}"
+            - "{{inventory_hostname}}:{{alertmanager_port}}"
 {% endif %}

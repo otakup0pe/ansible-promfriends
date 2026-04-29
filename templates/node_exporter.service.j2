@@ -24,7 +24,7 @@ ExecStart={{promnode_bin}} \
 {{'    '}}--collector.{{collector}} \
 {% endif %}
 {% endfor %}
-    --web.config=/opt/prometheus/etc/node_exporter-web_config.yml \
+    --web.config.file=/opt/prometheus/etc/node_exporter-web_config.yml \
     --web.listen-address=0.0.0.0:{{promnode_port}}
 
 SyslogIdentifier=node_exporter

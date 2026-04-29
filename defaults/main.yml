@@ -21,7 +21,7 @@ prometheus_container_user: "docker"
 prometheus_container_group: "docker"
 prometheus_data_path: "/opt/prometheus/data"
 prometheus_docker_name: "prometheus"
-prometheus_version: "2.43.0"
+prometheus_version: "3.11.2"
 prometheus_scrape_interval: "15s"
 prometheus_scrape_timeout: "5s"
 prometheus_retention_time: "336h"
@@ -63,14 +63,14 @@ promstatsd_ip: "127.0.0.1"
 
 prombb_config: "blackbox.yml.j2"
 prombb_port: "9115"
-prombb_version: "0.27.0"
+prombb_version: "0.28.0"
 prombb_log: "warn"
 prombb_probe_log: "error"
 
 prombb_publish:
   - "{{prometheus_address}}:{{prombb_port}}:{{prombb_port}}"
 
-promnode_version: "1.4.0"
+promnode_version: "1.11.1"
 promnode_group: "prometheus"
 promnode_binary_path: "/usr/local/bin"
 promnode_cache_path: "{{promfriends_cache_path}}"
@@ -104,6 +104,23 @@ promnode_port: 9100
 promnode_running: true
 promnode_startup: true
 promnode_pkg_exporter: true
+# pkg-exporter is installed into a uv-managed venv with system site-packages
+# access (so it can import python-apt for distro package state).
+promnode_pkg_exporter_install_path: "/opt/promnode-pkg-exporter"
+# scheduler for the pkg-exporter run. one of:
+#   "systemd" -- deploy a systemd oneshot service + timer (recommended)
+#   "cron"    -- deploy a crontab entry (requires crontab installed; legacy)
+# whichever is selected, the OTHER mode's artifacts are cleaned up on each
+# converge so flipping is safe.
+promnode_pkg_exporter_scheduler: "systemd"
+# systemd OnCalendar expression. default: every 15 minutes.
+promnode_pkg_exporter_oncalendar: "*:0/15"
+# cron schedule (5 fields). default matches the OnCalendar above.
+promnode_pkg_exporter_cron_minute: "0,15,30,45"
+promnode_pkg_exporter_cron_hour: "*"
+promnode_pkg_exporter_cron_day: "*"
+promnode_pkg_exporter_cron_month: "*"
+promnode_pkg_exporter_cron_weekday: "*"
 
 alertmanager_smtp_port: "465"
 alertmanager_receivers: []
@@ -111,7 +128,7 @@ alertmanager_routes: []
 alertmanager_repeat_interval: "24h"
 alertmanager_group_by:
   - "alertname"
-alertmanager_version: "0.25.0"
+alertmanager_version: "0.32.0"
 alertmanager_data_path: "/opt/prometheus/alertmanager"
 alertmanager_retention: "120h"
 alertmanager_port: "9093"
@@ -122,7 +139,7 @@ cadvisor_version: "0.47.1"
 cadvisor_port: "9980"
 cadvisor_docker_group: "docker"
 
-pushgateway_version: "1.7.0"
+pushgateway_version: "1.11.2"
 pushgateway_address: "{{prometheus_address}}"
 pushgateway_port: "9091"
 pushgateway_publish:

@@ -24,7 +24,7 @@
 
 - name: "ensure blackbox container is running"
   uri:
-    url: "https://{{inventory_hostname}}:9115/"
+    url: "https://{{inventory_hostname}}:{{prombb_health_port | default(prombb_port)}}/"
     ca_path: "{{promfriends_config_path}}/ca.crt"
     client_cert: "{{promfriends_config_path}}/server.crt"
     client_key: "{{promfriends_config_path}}/server.key"

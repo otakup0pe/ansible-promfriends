@@ -1,0 +1,11 @@
+# {{ ansible_managed }}
+[Unit]
+Description=run promfriend node pkg-exporter on schedule
+
+[Timer]
+OnCalendar={{ promnode_pkg_exporter_oncalendar }}
+AccuracySec=1m
+Unit=promnode-pkg-exporter.service
+
+[Install]
+WantedBy=timers.target
