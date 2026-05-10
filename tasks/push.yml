@@ -1,24 +1,59 @@
 ---
-- include_tasks: "docker.yml"
-  vars:
-    context: "pushgateway"
-    image: "{{pushgateway_image}}"
-    use_command: "{{pushgateway_command}}"
-    volume:
-      - "{{promfriends_config_path}}/web_config.yml:/web_config.yml:ro"
-      - "{{promfriends_config_path}}/server.crt:/server.crt:ro"
-      - "{{promfriends_config_path}}/server.key:/server.key:ro"
-      - "{{promfriends_config_path}}/ca.crt:/ca.crt:ro"
-    changed: "{{promfriends_certs_changed}}"
-    publish: "{{pushgateway_publish}}"
+- block:
+    - name: "check pushgateway container state"
+      become: false
+      delegate_to: "localhost"
+      docker_container_info:
+        name: "pushgateway"
+        tls: true
+        ca_cert: "{{promfriends_docker_cacert_path}}"
+        client_key: "{{promfriends_docker_key_path}}"
+        client_cert: "{{promfriends_docker_cert_path}}"
+        tls_hostname: "{{inventory_hostname}}"
+        validate_certs: true
+        docker_host: "tcp://{{inventory_hostname}}:2376"
+      register: _pushgateway_info
+      no_log: "{{yopo_debug|default('') != 'true'}}"
 
-- name: "ensure push gateway container is running"
-  uri:
-    url: "https://{{inventory_hostname}}:{{pushgateway_port}}/-/ready"
-    ca_path: "{{promfriends_config_path}}/ca.crt"
-    client_cert: "{{promfriends_config_path}}/server.crt"
-    client_key: "{{promfriends_config_path}}/server.key"
-  register: core_status
-  until: core_status.status == 200
-  retries: 5
-  delay: 10
+    - name: "remove pushgateway container"
+      become: false
+      delegate_to: "localhost"
+      docker_container:
+        name: "pushgateway"
+        docker_host: "tcp://{{promfriends_docker_host}}:2376"
+        ca_cert: "{{promfriends_docker_cacert_path}}"
+        client_key: "{{promfriends_docker_key_path}}"
+        client_cert: "{{promfriends_docker_cert_path}}"
+        tls_hostname: "{{promfriends_docker_host}}"
+        validate_certs: true
+        state: "absent"
+      when: _pushgateway_info.exists|default(false)
+  when: '"push" not in promfriends_contexts|default([])'
+
+- block:
+    - include_tasks: "docker.yml"
+      vars:
+        context: "pushgateway"
+        image: "{{pushgateway_image}}"
+        use_command: >
+          --web.config.file=/web_config.yml
+          --web.listen-address={{pushgateway_address}}:{{pushgateway_port}}
+        volume:
+          - "{{promfriends_config_path}}/web_config.yml:/web_config.yml:ro"
+          - "{{promfriends_config_path}}/server.crt:/server.crt:ro"
+          - "{{promfriends_config_path}}/server.key:/server.key:ro"
+          - "{{promfriends_config_path}}/ca.crt:/ca.crt:ro"
+        changed: "{{promfriends_certs_changed}}"
+        publish: "{{pushgateway_publish}}"
+
+    - name: "ensure push gateway container is running"
+      uri:
+        url: "https://{{inventory_hostname}}:{{pushgateway_port}}/-/ready"
+        ca_path: "{{promfriends_config_path}}/ca.crt"
+        client_cert: "{{promfriends_config_path}}/server.crt"
+        client_key: "{{promfriends_config_path}}/server.key"
+      register: core_status
+      until: core_status.status == 200
+      retries: 5
+      delay: 10
+  when: '"push" in promfriends_contexts|default([])'

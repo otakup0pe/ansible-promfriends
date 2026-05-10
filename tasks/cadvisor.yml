@@ -1,43 +1,76 @@
 ---
-- name: "get group id"
-  getent:
-    database: "group"
-    key: "{{cadvisor_docker_group}}"
+- block:
+    - name: "check cadvisor container state"
+      become: false
+      delegate_to: "localhost"
+      docker_container_info:
+        name: "cadvisor"
+        tls: true
+        ca_cert: "{{promfriends_docker_cacert_path}}"
+        client_key: "{{promfriends_docker_key_path}}"
+        client_cert: "{{promfriends_docker_cert_path}}"
+        tls_hostname: "{{inventory_hostname}}"
+        validate_certs: true
+        docker_host: "tcp://{{inventory_hostname}}:2376"
+      register: _cadvisor_info
+      no_log: "{{yopo_debug|default('') != 'true'}}"
 
-- set_fact:
-    cadvisor_docker_gid: "{{getent_group[cadvisor_docker_group][1]}}"
+    - name: "remove cadvisor container"
+      become: false
+      delegate_to: "localhost"
+      docker_container:
+        name: "cadvisor"
+        docker_host: "tcp://{{promfriends_docker_host}}:2376"
+        ca_cert: "{{promfriends_docker_cacert_path}}"
+        client_key: "{{promfriends_docker_key_path}}"
+        client_cert: "{{promfriends_docker_cert_path}}"
+        tls_hostname: "{{promfriends_docker_host}}"
+        validate_certs: true
+        state: "absent"
+      when: _cadvisor_info.exists|default(false)
+  when: '"cadvisor" not in promfriends_contexts|default([])'
 
-- include_tasks: "docker.yml"
-  vars:
-    context: "cadvisor"
-    image: "{{cadvisor_image}}"
-    privileged: true
-    user: "root"
-    use_devices:
-      - "/dev/kmsg:/dev/kmsg:ro"
-    publish:
-      - "127.0.0.1:{{cadvisor_port}}:{{cadvisor_port}}"
-    volume:
-      - "/:/rootfs:ro"
-      - "/run/docker.sock:/run/docker.sock:ro"
-      - "/sys:/sys:ro"
-      - "/var/lib/docker/:/var/lib/docker:ro"
-      - "/dev/disk/:/dev/disk:ro"
-      - "/sys/fs/cgroup:/sys/fs/cgroup:ro"
-      - "/etc/machine-id:/etc/machine-id:ro"
-    container_groups:
-      - "{{cadvisor_docker_gid}}"
-    use_command:
-      - "--logtostderr=true"
-      - "--http_auth_realm={{inventory_hostname}}"
-      - "--port={{cadvisor_port}}"
-    use_env:
-      CADVISOR_HEALTHCHECK_URL: "http://localhost:{{cadvisor_port}}/healthz"
+- block:
+    - name: "get group id"
+      getent:
+        database: "group"
+        key: "{{cadvisor_docker_group}}"
 
-- name: "ensure cadvisor container is running"
-  uri:
-    url: "http://{{inventory_hostname}}:{{cadvisor_port}}/"
-  register: cadvisor_status
-  until: cadvisor_status.status == 200
-  retries: 5
-  delay: 10
+    - set_fact:
+        cadvisor_docker_gid: "{{getent_group[cadvisor_docker_group][1]}}"
+
+    - include_tasks: "docker.yml"
+      vars:
+        context: "cadvisor"
+        image: "{{cadvisor_image}}"
+        privileged: true
+        user: "root"
+        use_devices:
+          - "/dev/kmsg:/dev/kmsg:ro"
+        publish:
+          - "127.0.0.1:{{cadvisor_port}}:{{cadvisor_port}}"
+        volume:
+          - "/:/rootfs:ro"
+          - "/run/docker.sock:/run/docker.sock:ro"
+          - "/sys:/sys:ro"
+          - "/var/lib/docker/:/var/lib/docker:ro"
+          - "/dev/disk/:/dev/disk:ro"
+          - "/sys/fs/cgroup:/sys/fs/cgroup:ro"
+          - "/etc/machine-id:/etc/machine-id:ro"
+        container_groups:
+          - "{{cadvisor_docker_gid}}"
+        use_command:
+          - "--logtostderr=true"
+          - "--http_auth_realm={{inventory_hostname}}"
+          - "--port={{cadvisor_port}}"
+        use_env:
+          CADVISOR_HEALTHCHECK_URL: "http://localhost:{{cadvisor_port}}/healthz"
+
+    - name: "ensure cadvisor container is running"
+      uri:
+        url: "http://{{inventory_hostname}}:{{cadvisor_port}}/"
+      register: cadvisor_status
+      until: cadvisor_status.status == 200
+      retries: 5
+      delay: 10
+  when: '"cadvisor" in promfriends_contexts|default([])'

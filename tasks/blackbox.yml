@@ -1,34 +1,77 @@
 ---
-- name: "generate blackbox config"
-  template:
-    src: "{{prombb_config}}"
-    dest: "{{promfriends_config_path}}/blackbox.yml"
-    owner: "{{prometheus_container_user}}"
-    group: "{{prometheus_container_group}}"
-    mode: "0660"
-  register: blackbox_config
+- block:
+    - name: "check blackbox container state"
+      become: false
+      delegate_to: "localhost"
+      docker_container_info:
+        name: "prom_blackbox"
+        tls: true
+        ca_cert: "{{promfriends_docker_cacert_path}}"
+        client_key: "{{promfriends_docker_key_path}}"
+        client_cert: "{{promfriends_docker_cert_path}}"
+        tls_hostname: "{{inventory_hostname}}"
+        validate_certs: true
+        docker_host: "tcp://{{inventory_hostname}}:2376"
+      register: _blackbox_info
+      no_log: "{{yopo_debug|default('') != 'true'}}"
 
-- include_tasks: "docker.yml"
-  vars:
-    context: "prom_blackbox"
-    image: "{{prombb_image}}"
-    use_command: "{{prombb_command}}"
-    volume:
-      - "{{promfriends_config_path}}/blackbox.yml:/blackbox.yml:ro"
-      - "{{promfriends_config_path}}/web_config.yml:/web_config.yml:ro"
-      - "{{promfriends_config_path}}/server.crt:/server.crt:ro"
-      - "{{promfriends_config_path}}/server.key:/server.key:ro"
-      - "{{promfriends_config_path}}/ca.crt:/ca.crt:ro"
-    changed: "{{blackbox_config.changed or promfriends_certs_changed}}"
-    publish: "{{prombb_publish}}"
+    - name: "remove blackbox container"
+      become: false
+      delegate_to: "localhost"
+      docker_container:
+        name: "prom_blackbox"
+        docker_host: "tcp://{{promfriends_docker_host}}:2376"
+        ca_cert: "{{promfriends_docker_cacert_path}}"
+        client_key: "{{promfriends_docker_key_path}}"
+        client_cert: "{{promfriends_docker_cert_path}}"
+        tls_hostname: "{{promfriends_docker_host}}"
+        validate_certs: true
+        state: "absent"
+      when: _blackbox_info.exists|default(false)
 
-- name: "ensure blackbox container is running"
-  uri:
-    url: "https://{{inventory_hostname}}:{{prombb_health_port | default(prombb_port)}}/"
-    ca_path: "{{promfriends_config_path}}/ca.crt"
-    client_cert: "{{promfriends_config_path}}/server.crt"
-    client_key: "{{promfriends_config_path}}/server.key"
-  register: core_status
-  until: core_status.status == 200
-  retries: 5
-  delay: 10
+    - name: "remove blackbox config"
+      file:
+        path: "{{promfriends_config_path}}/blackbox.yml"
+        state: "absent"
+  when: '"blackbox" not in promfriends_contexts|default([])'
+
+- block:
+    - name: "generate blackbox config"
+      template:
+        src: "{{prombb_config}}"
+        dest: "{{promfriends_config_path}}/blackbox.yml"
+        owner: "{{prometheus_container_user}}"
+        group: "{{prometheus_container_group}}"
+        mode: "0660"
+      register: blackbox_config
+
+    - include_tasks: "docker.yml"
+      vars:
+        context: "prom_blackbox"
+        image: "{{prombb_image}}"
+        use_command: >
+          --config.file=/blackbox.yml
+          --web.config.file=/web_config.yml
+          --web.listen-address={{prometheus_address}}:{{prombb_port}}
+          --log.level={{prombb_log}}
+          --log.prober={{prombb_probe_log}}
+        volume:
+          - "{{promfriends_config_path}}/blackbox.yml:/blackbox.yml:ro"
+          - "{{promfriends_config_path}}/web_config.yml:/web_config.yml:ro"
+          - "{{promfriends_config_path}}/server.crt:/server.crt:ro"
+          - "{{promfriends_config_path}}/server.key:/server.key:ro"
+          - "{{promfriends_config_path}}/ca.crt:/ca.crt:ro"
+        changed: "{{blackbox_config.changed|default(false) or promfriends_certs_changed}}"
+        publish: "{{prombb_publish}}"
+
+    - name: "ensure blackbox container is running"
+      uri:
+        url: "https://{{inventory_hostname}}:9115/"
+        ca_path: "{{promfriends_config_path}}/ca.crt"
+        client_cert: "{{promfriends_config_path}}/server.crt"
+        client_key: "{{promfriends_config_path}}/server.key"
+      register: core_status
+      until: core_status.status == 200
+      retries: 5
+      delay: 10
+  when: '"blackbox" in promfriends_contexts|default([])'

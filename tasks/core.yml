@@ -1,110 +1,182 @@
 ---
-- name: "create data dir with proper perms"
-  file:
-    path: "{{prometheus_data_path}}"
-    owner: "{{prometheus_container_user}}"
-    group: "{{prometheus_container_group}}"
-    mode: "0770"
-    state: "directory"
+- block:
+    - name: "check prometheus container state"
+      become: false
+      delegate_to: "localhost"
+      docker_container_info:
+        name: "{{prometheus_docker_name}}"
+        tls: true
+        ca_cert: "{{promfriends_docker_cacert_path}}"
+        client_key: "{{promfriends_docker_key_path}}"
+        client_cert: "{{promfriends_docker_cert_path}}"
+        tls_hostname: "{{inventory_hostname}}"
+        validate_certs: true
+        docker_host: "tcp://{{inventory_hostname}}:2376"
+      register: _prometheus_info
+      no_log: "{{yopo_debug|default('') != 'true'}}"
 
-- name: "remove old site scrape config templates"
-  file:
-    path: "{{promfriends_cache_path}}/{{inventory_hostname}}\
-    -{{item.template|basename}}"
-    state: "absent"
-  loop: "{{promfriends_site_configs}}"
-  when: item.state|default('present') == 'absent'
-  register: promfriends_removed_configs
+    - name: "remove prometheus container"
+      become: false
+      delegate_to: "localhost"
+      docker_container:
+        name: "{{prometheus_docker_name}}"
+        docker_host: "tcp://{{promfriends_docker_host}}:2376"
+        ca_cert: "{{promfriends_docker_cacert_path}}"
+        client_key: "{{promfriends_docker_key_path}}"
+        client_cert: "{{promfriends_docker_cert_path}}"
+        tls_hostname: "{{promfriends_docker_host}}"
+        validate_certs: true
+        state: "absent"
+      when: _prometheus_info.exists|default(false)
 
-- name: "render site scrape configs"
-  delegate_to: "localhost"
-  become: false
-  template:
-    src: "{{item.template}}"
-    dest: "{{promfriends_cache_path}}/{{inventory_hostname}}\
-    -{{item.template|basename}}"
-    mode: "0600"
-    vars: "{{item.vars|default(omit)}}"
-  register: promfriends_site_rendered
-  loop: "{{promfriends_site_configs}}"
-  when: item.state|default('present') == 'present'
+    - name: "remove prometheus config"
+      file:
+        path: "{{promfriends_config_path}}/prometheus.yml"
+        state: "absent"
 
-- name: "load site scrape configs"
-  include_vars:
-    file: "{{item.dest}}"
-    name: "promfriends_scrape_tmp"
-  loop: "{{promfriends_site_rendered.results}}"
-  when: item.item.state|default('present') == 'present'
-  register: promfriends_loaded_configs
+    - name: "find rule files to remove"
+      find:
+        paths: "{{promfriends_config_path}}"
+        patterns: "*_rule.yml"
+      register: _promfriends_rule_files
 
-- name: "parse out dynamic configs"
-  set_fact:
-    promfriends_site_scrapes: "{{promfriends_loaded_configs.results \
-    | json_query('[].[ansible_facts.promfriends_scrape_tmp] | [].scrapes')}}"
+    - name: "remove rule files"
+      file:
+        path: "{{item.path}}"
+        state: "absent"
+      loop: "{{_promfriends_rule_files.files}}"
 
-- name: "set sites based scrape structure"
-  set_fact:
-    prometheus_scrapes: "{{lookup('flattened', promfriends_site_scrapes)}}"
-  when: promfriends_site_scrapes|length > 0
+    - name: "find scrape config cache files"
+      find:
+        paths: "{{promfriends_cache_path}}"
+        patterns: "{{inventory_hostname}}-*"
+      register: _promfriends_cache_files
+      delegate_to: "localhost"
+      become: false
 
-- name: "generate prometheus configuration"
-  template:
-    src: "prometheus.yml.j2"
-    dest: "{{promfriends_config_path}}/prometheus.yml"
-    owner: "{{prometheus_container_user}}"
-    group: "{{prometheus_container_group}}"
-    mode: "0660"
-    validate: "/opt/prometheus/bin/promtool-wrapper check-config %s"
-  register: prom_config
+    - name: "clean scrape config cache"
+      file:
+        path: "{{item.path}}"
+        state: "absent"
+      loop: "{{_promfriends_cache_files.files}}"
+      delegate_to: "localhost"
+      become: false
+  when: '"core" not in promfriends_contexts|default([])'
 
-- name: "generate rule files"
-  template:
-    src: "{{item.template}}"
-    dest: "{{promfriends_config_path}}/{{(item.template|basename|splitext)[0]}}\
-    _rule.yml"
-    owner: "{{prometheus_container_user}}"
-    group: "{{prometheus_container_group}}"
-    mode: "0660"
-    validate: "/opt/prometheus/bin/promtool-wrapper check-rules %s"
-  loop: "{{promfriends_rule_configs}}"
-  when: item.state|default('present') == 'present'
-  register: promfriends_update_rules
+- block:
+    - name: "create data dir with proper perms"
+      file:
+        path: "{{prometheus_data_path}}"
+        owner: "{{prometheus_container_user}}"
+        group: "{{prometheus_container_group}}"
+        mode: "0770"
+        state: "directory"
 
-- name: "remove rule files"
-  file:
-    path: "{{promfriends_config_path}}/{{(item.template|basename|splitext)[0]}}\
-    _rule.yml"
-    state: "absent"
-  loop: "{{promfriends_rule_configs}}"
-  when: item.state|default('present') == 'absent'
-  register: promfriends_remove_rules
+    - name: "remove old site scrape config templates"
+      file:
+        path: "{{promfriends_cache_path}}/{{inventory_hostname}}\
+        -{{item.template|basename}}"
+        state: "absent"
+      loop: "{{promfriends_site_configs}}"
+      when: item.state|default('present') == 'absent'
+      register: promfriends_removed_configs
 
-- include_tasks: "docker.yml"
-  vars:
-    context: "{{prometheus_docker_name}}"
-    image: "{{prometheus_image}}"
-    publish: "{{prometheus_publish}}"
-    volume:
-      - "{{promfriends_config_path}}:/etc/prometheus:ro"
-      - "{{prometheus_data_path}}:/prometheus"
-      - "{{promfriends_config_path}}/web_config.yml:/web_config.yml:ro"
-      - "{{promfriends_config_path}}/server.crt:/server.crt:ro"
-      - "{{promfriends_config_path}}/server.key:/server.key:ro"
-      - "{{promfriends_config_path}}/ca.crt:/ca.crt:ro"
-    use_command: "{{prometheus_command}}"
-    changed: "{{prom_config.changed \
-    or promfriends_certs_changed \
-    or promfriends_web_config.changed \
-    or promfriends_update_rules.changed \
-    or promfriends_remove_rules.changed}}"
+    - name: "render site scrape configs"
+      delegate_to: "localhost"
+      become: false
+      template:
+        src: "{{item.template}}"
+        dest: "{{promfriends_cache_path}}/{{inventory_hostname}}\
+        -{{item.template|basename}}"
+        mode: "0600"
+        vars: "{{item.vars|default(omit)}}"
+      register: promfriends_site_rendered
+      loop: "{{promfriends_site_configs}}"
+      when: item.state|default('present') == 'present'
 
-- name: "ensure prometheus container is running"
-  uri:
-    url: "https://{{inventory_hostname}}:{{prometheus_health_port | default(prometheus_port)}}/"
-    ca_path: "{{promfriends_config_path}}/ca.crt"
-    client_cert: "{{promfriends_config_path}}/server.crt"
-    client_key: "{{promfriends_config_path}}/server.key"
-  register: core_status
-  until: core_status.status == 200
-  retries: 60
-  delay: 5
+    - name: "load site scrape configs"
+      include_vars:
+        file: "{{item.dest}}"
+        name: "promfriends_scrape_tmp"
+      loop: "{{promfriends_site_rendered.results}}"
+      when: item.item.state|default('present') == 'present'
+      register: promfriends_loaded_configs
+
+    - name: "parse out dynamic configs"
+      set_fact:
+        promfriends_site_scrapes: "{{promfriends_loaded_configs.results \
+        | json_query('[].[ansible_facts.promfriends_scrape_tmp] | [].scrapes')}}"
+
+    - name: "set sites based scrape structure"
+      set_fact:
+        prometheus_scrapes: "{{lookup('flattened', promfriends_site_scrapes)}}"
+      when: promfriends_site_scrapes|length > 0
+
+    - name: "generate prometheus configuration"
+      template:
+        src: "prometheus.yml.j2"
+        dest: "{{promfriends_config_path}}/prometheus.yml"
+        owner: "{{prometheus_container_user}}"
+        group: "{{prometheus_container_group}}"
+        mode: "0660"
+        validate: "/opt/prometheus/bin/promtool-wrapper check-config %s"
+      register: prom_config
+
+    - name: "generate rule files"
+      template:
+        src: "{{item.template}}"
+        dest: "{{promfriends_config_path}}/{{(item.template|basename|splitext)[0]}}\
+        _rule.yml"
+        owner: "{{prometheus_container_user}}"
+        group: "{{prometheus_container_group}}"
+        mode: "0660"
+        validate: "/opt/prometheus/bin/promtool-wrapper check-rules %s"
+      loop: "{{promfriends_rule_configs}}"
+      when: item.state|default('present') == 'present'
+      register: promfriends_update_rules
+
+    - name: "remove rule files"
+      file:
+        path: "{{promfriends_config_path}}/{{(item.template|basename|splitext)[0]}}\
+        _rule.yml"
+        state: "absent"
+      loop: "{{promfriends_rule_configs}}"
+      when: item.state|default('present') == 'absent'
+      register: promfriends_remove_rules
+
+    - include_tasks: "docker.yml"
+      vars:
+        context: "{{prometheus_docker_name}}"
+        image: "{{prometheus_image}}"
+        publish: "{{prometheus_publish}}"
+        volume:
+          - "{{promfriends_config_path}}:/etc/prometheus:ro"
+          - "{{prometheus_data_path}}:/prometheus"
+          - "{{promfriends_config_path}}/web_config.yml:/web_config.yml:ro"
+          - "{{promfriends_config_path}}/server.crt:/server.crt:ro"
+          - "{{promfriends_config_path}}/server.key:/server.key:ro"
+          - "{{promfriends_config_path}}/ca.crt:/ca.crt:ro"
+        use_command: >
+          --storage.tsdb.retention.time={{prometheus_retention_time}}
+          --config.file=/etc/prometheus/prometheus.yml
+          --storage.tsdb.path=/prometheus
+          --web.config.file=/web_config.yml
+          --log.level={{prometheus_log_level}}
+          --web.listen-address={{prometheus_address}}:{{prometheus_port}}
+        changed: "{{prom_config.changed|default(false) \
+        or promfriends_certs_changed \
+        or promfriends_web_config.changed|default(false) \
+        or promfriends_update_rules.changed|default(false) \
+        or promfriends_remove_rules.changed|default(false)}}"
+
+    - name: "ensure prometheus container is running"
+      uri:
+        url: "https://{{inventory_hostname}}:{{prometheus_port}}/"
+        ca_path: "{{promfriends_config_path}}/ca.crt"
+        client_cert: "{{promfriends_config_path}}/server.crt"
+        client_key: "{{promfriends_config_path}}/server.key"
+      register: core_status
+      until: core_status.status == 200
+      retries: 60
+      delay: 5
+  when: '"core" in promfriends_contexts|default([])'

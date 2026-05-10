@@ -1,48 +1,86 @@
 ---
-- name: "create alert data dir with proper perms"
-  file:
-    path: "{{alertmanager_data_path}}"
-    owner: "{{prometheus_container_user}}"
-    group: "{{prometheus_container_group}}"
-    mode: "0770"
-    state: "directory"
+- block:
+    - name: "check alertmanager container state"
+      become: false
+      delegate_to: "localhost"
+      docker_container_info:
+        name: "alertmanager"
+        tls: true
+        ca_cert: "{{promfriends_docker_cacert_path}}"
+        client_key: "{{promfriends_docker_key_path}}"
+        client_cert: "{{promfriends_docker_cert_path}}"
+        tls_hostname: "{{inventory_hostname}}"
+        validate_certs: true
+        docker_host: "tcp://{{inventory_hostname}}:2376"
+      register: _alertmanager_info
+      no_log: "{{yopo_debug|default('') != 'true'}}"
 
-- name: "generate alertmanager configuration"
-  template:
-    src: "alertmanager.yml.j2"
-    dest: "{{promfriends_config_path}}/alertmanager.yml"
-    owner: "{{prometheus_container_user}}"
-    group: "{{prometheus_container_group}}"
-    mode: "0640"
-  register: alertmanager_config
+    - name: "remove alertmanager container"
+      become: false
+      delegate_to: "localhost"
+      docker_container:
+        name: "alertmanager"
+        docker_host: "tcp://{{promfriends_docker_host}}:2376"
+        ca_cert: "{{promfriends_docker_cacert_path}}"
+        client_key: "{{promfriends_docker_key_path}}"
+        client_cert: "{{promfriends_docker_cert_path}}"
+        tls_hostname: "{{promfriends_docker_host}}"
+        validate_certs: true
+        state: "absent"
+      when: _alertmanager_info.exists|default(false)
 
-- include_tasks: "docker.yml"
-  vars:
-    context: "alertmanager"
-    image: "{{alertmanager_image}}"
-    publish: "{{alertmanager_publish}}"
-    use_command: >-
-      --config.file=/alertmanager.yml
-      --web.config.file=/web_config.yml
-      --web.listen-address={{prometheus_address}}:{{alertmanager_port}}
-      --storage.path=/data
-      --data.retention={{alertmanager_retention}}
-    volume:
-      - "{{promfriends_config_path}}/web_config.yml:/web_config.yml:ro"
-      - "{{promfriends_config_path}}/alertmanager.yml:/alertmanager.yml:ro"
-      - "{{alertmanager_data_path}}:/data:rw"
-      - "{{promfriends_config_path}}/server.crt:/server.crt:ro"
-      - "{{promfriends_config_path}}/server.key:/server.key:ro"
-      - "{{promfriends_config_path}}/ca.crt:/ca.crt:ro"
-    changed: "{{alertmanager_config.changed or promfriends_certs_changed}}"
+    - name: "remove alertmanager config"
+      file:
+        path: "{{promfriends_config_path}}/alertmanager.yml"
+        state: "absent"
+  when: '"alerts" not in promfriends_contexts|default([])'
 
-- name: "ensure alertmanager container is running"
-  uri:
-    url: "https://{{inventory_hostname}}:{{alertmanager_port}}/"
-    ca_path: "{{promfriends_config_path}}/ca.crt"
-    client_cert: "{{promfriends_config_path}}/server.crt"
-    client_key: "{{promfriends_config_path}}/server.key"
-  register: alertmanager_status
-  until: alertmanager_status.status == 200
-  retries: 5
-  delay: 10
+- block:
+    - name: "create alert data dir with proper perms"
+      file:
+        path: "{{alertmanager_data_path}}"
+        owner: "{{prometheus_container_user}}"
+        group: "{{prometheus_container_group}}"
+        mode: "0770"
+        state: "directory"
+
+    - name: "generate alertmanager configuration"
+      template:
+        src: "alertmanager.yml.j2"
+        dest: "{{promfriends_config_path}}/alertmanager.yml"
+        owner: "{{prometheus_container_user}}"
+        group: "{{prometheus_container_group}}"
+        mode: "0640"
+      register: alertmanager_config
+
+    - include_tasks: "docker.yml"
+      vars:
+        context: "alertmanager"
+        image: "{{alertmanager_image}}"
+        publish: "{{alertmanager_publish}}"
+        use_command: >-
+          --config.file=/alertmanager.yml
+          --web.config.file=/web_config.yml
+          --web.listen-address={{prometheus_address}}:{{alertmanager_port}}
+          --storage.path=/data
+          --data.retention={{alertmanager_retention}}
+        volume:
+          - "{{promfriends_config_path}}/web_config.yml:/web_config.yml:ro"
+          - "{{promfriends_config_path}}/alertmanager.yml:/alertmanager.yml:ro"
+          - "{{alertmanager_data_path}}:/data:rw"
+          - "{{promfriends_config_path}}/server.crt:/server.crt:ro"
+          - "{{promfriends_config_path}}/server.key:/server.key:ro"
+          - "{{promfriends_config_path}}/ca.crt:/ca.crt:ro"
+        changed: "{{alertmanager_config.changed|default(false) or promfriends_certs_changed}}"
+
+    - name: "ensure alertmanager container is running"
+      uri:
+        url: "https://{{inventory_hostname}}:{{alertmanager_port}}/"
+        ca_path: "{{promfriends_config_path}}/ca.crt"
+        client_cert: "{{promfriends_config_path}}/server.crt"
+        client_key: "{{promfriends_config_path}}/server.key"
+      register: alertmanager_status
+      until: alertmanager_status.status == 200
+      retries: 5
+      delay: 10
+  when: '"alerts" in promfriends_contexts|default([])'

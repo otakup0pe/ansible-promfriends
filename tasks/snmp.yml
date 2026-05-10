@@ -1,18 +1,56 @@
 ---
-- name: "generate snmp exporter configuration"
-  template:
-    src: "snmp.yml"
-    dest: "{{promfriends_config_path}}/snmp.yml"
-    owner: "{{prometheus_container_user}}"
-    group: "{{prometheus_container_group}}"
-    mode: "0660"
-  register: snmp_config
+- block:
+    - name: "check snmp container state"
+      become: false
+      delegate_to: "localhost"
+      docker_container_info:
+        name: "prom_snmp"
+        tls: true
+        ca_cert: "{{promfriends_docker_cacert_path}}"
+        client_key: "{{promfriends_docker_key_path}}"
+        client_cert: "{{promfriends_docker_cert_path}}"
+        tls_hostname: "{{inventory_hostname}}"
+        validate_certs: true
+        docker_host: "tcp://{{inventory_hostname}}:2376"
+      register: _snmp_info
+      no_log: "{{yopo_debug|default('') != 'true'}}"
 
-- include_tasks: "docker.yml"
-  vars:
-    context: "prom_snmp"
-    image: "prom/snmp-exporter"
-    with_command: "-config.file=/snmp.yml"
-    volume:
-      - "{{promfriends_config_path}}/snmp.yml:/etc/snmp_exporter/snmp.yml"
-    changed: "{{snmp_config.changed}}"
+    - name: "remove snmp container"
+      become: false
+      delegate_to: "localhost"
+      docker_container:
+        name: "prom_snmp"
+        docker_host: "tcp://{{promfriends_docker_host}}:2376"
+        ca_cert: "{{promfriends_docker_cacert_path}}"
+        client_key: "{{promfriends_docker_key_path}}"
+        client_cert: "{{promfriends_docker_cert_path}}"
+        tls_hostname: "{{promfriends_docker_host}}"
+        validate_certs: true
+        state: "absent"
+      when: _snmp_info.exists|default(false)
+
+    - name: "remove snmp config"
+      file:
+        path: "{{promfriends_config_path}}/snmp.yml"
+        state: "absent"
+  when: '"snmp" not in promfriends_contexts|default([])'
+
+- block:
+    - name: "generate snmp exporter configuration"
+      template:
+        src: "snmp.yml"
+        dest: "{{promfriends_config_path}}/snmp.yml"
+        owner: "{{prometheus_container_user}}"
+        group: "{{prometheus_container_group}}"
+        mode: "0660"
+      register: snmp_config
+
+    - include_tasks: "docker.yml"
+      vars:
+        context: "prom_snmp"
+        image: "prom/snmp-exporter"
+        with_command: "-config.file=/snmp.yml"
+        volume:
+          - "{{promfriends_config_path}}/snmp.yml:/etc/snmp_exporter/snmp.yml"
+        changed: "{{snmp_config.changed|default(false)}}"
+  when: '"snmp" in promfriends_contexts|default([])'
