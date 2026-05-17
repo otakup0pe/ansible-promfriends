@@ -28,7 +28,9 @@
         validate_certs: true
         state: "absent"
       when: _pushgateway_info.exists|default(false)
-  when: '"push" not in promfriends_contexts|default([])'
+  when:
+    - '"push" not in promfriends_contexts|default([])'
+    - _promfriends_docker_available|default(false)
 
 - block:
     - include_tasks: "docker.yml"

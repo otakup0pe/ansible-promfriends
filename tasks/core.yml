@@ -61,7 +61,9 @@
       loop: "{{_promfriends_cache_files.files}}"
       delegate_to: "localhost"
       become: false
-  when: '"core" not in promfriends_contexts|default([])'
+  when:
+    - '"core" not in promfriends_contexts|default([])'
+    - _promfriends_docker_available|default(false)
 
 - block:
     - name: "create data dir with proper perms"

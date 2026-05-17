@@ -33,7 +33,9 @@
       file:
         path: "{{promfriends_config_path}}/blackbox.yml"
         state: "absent"
-  when: '"blackbox" not in promfriends_contexts|default([])'
+  when:
+    - '"blackbox" not in promfriends_contexts|default([])'
+    - _promfriends_docker_available|default(false)
 
 - block:
     - name: "generate blackbox config"

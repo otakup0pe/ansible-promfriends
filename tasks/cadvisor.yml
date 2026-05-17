@@ -28,7 +28,9 @@
         validate_certs: true
         state: "absent"
       when: _cadvisor_info.exists|default(false)
-  when: '"cadvisor" not in promfriends_contexts|default([])'
+  when:
+    - '"cadvisor" not in promfriends_contexts|default([])'
+    - _promfriends_docker_available|default(false)
 
 - block:
     - name: "get group id"

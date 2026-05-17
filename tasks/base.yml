@@ -1,4 +1,20 @@
 ---
+- name: "check docker availability"
+  command: "docker info"
+  register: _docker_check
+  changed_when: false
+  failed_when: false
+
+- set_fact:
+    _promfriends_docker_available: "{{_docker_check.rc == 0}}"
+
+- name: "docker is required for container-based contexts"
+  fail:
+    msg: "docker is not available but these contexts require it: {{promfriends_contexts | difference(['node'])}}"
+  when:
+    - not _promfriends_docker_available
+    - promfriends_contexts|default([]) | difference(['node']) | length > 0
+
 - name: "create cache directory"
   delegate_to: "localhost"
   become: false

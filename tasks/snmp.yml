@@ -33,7 +33,9 @@
       file:
         path: "{{promfriends_config_path}}/snmp.yml"
         state: "absent"
-  when: '"snmp" not in promfriends_contexts|default([])'
+  when:
+    - '"snmp" not in promfriends_contexts|default([])'
+    - _promfriends_docker_available|default(false)
 
 - block:
     - name: "generate snmp exporter configuration"

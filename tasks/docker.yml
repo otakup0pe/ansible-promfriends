@@ -34,7 +34,7 @@
     tls_hostname: "{{promfriends_docker_host}}"
     comparisons:
       "*": "strict"
-    recreate: true
+    recreate: "{{changed|default(false)}}"
     published_ports: "{{publish|default(omit)}}"
     restart_policy: "unless-stopped"
     privileged: "{{privileged|default(False)}}"
