@@ -123,6 +123,7 @@ alertmanager_version: "0.32.0"
 alertmanager_data_path: "/opt/prometheus/alertmanager"
 alertmanager_retention: "120h"
 alertmanager_port: "9093"
+alertmanager_external_url: "https://{{inventory_hostname}}:{{alertmanager_port}}"
 alertmanager_publish:
   - "{{prometheus_address}}:{{alertmanager_port}}:{{alertmanager_port}}"
 
@@ -135,3 +136,7 @@ pushgateway_address: "{{prometheus_address}}"
 pushgateway_port: "9091"
 pushgateway_publish:
   - "{{pushgateway_address}}:{{pushgateway_port}}:{{pushgateway_port}}"
+pushgateway_server_cert: "{{promfriends_config_path}}/server.crt"
+pushgateway_server_key: "{{promfriends_config_path}}/server.key"
+pushgateway_server_ca: "{{promfriends_config_path}}/ca.crt"
+pushgateway_health_host: "{{inventory_hostname}}"

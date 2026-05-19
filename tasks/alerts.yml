@@ -64,6 +64,7 @@
           --config.file=/alertmanager.yml
           --web.config.file=/web_config.yml
           --web.listen-address={{prometheus_address}}:{{alertmanager_port}}
+          --web.external-url={{alertmanager_external_url}}
           --storage.path=/data
           --data.retention={{alertmanager_retention}}
         volume:

@@ -42,16 +42,16 @@
           --web.listen-address={{pushgateway_address}}:{{pushgateway_port}}
         volume:
           - "{{promfriends_config_path}}/web_config.yml:/web_config.yml:ro"
-          - "{{promfriends_config_path}}/server.crt:/server.crt:ro"
-          - "{{promfriends_config_path}}/server.key:/server.key:ro"
-          - "{{promfriends_config_path}}/ca.crt:/ca.crt:ro"
+          - "{{pushgateway_server_cert}}:/server.crt:ro"
+          - "{{pushgateway_server_key}}:/server.key:ro"
+          - "{{pushgateway_server_ca}}:/ca.crt:ro"
         changed: "{{promfriends_certs_changed}}"
         publish: "{{pushgateway_publish}}"
 
     - name: "ensure push gateway container is running"
       uri:
-        url: "https://{{inventory_hostname}}:{{pushgateway_port}}/-/ready"
-        ca_path: "{{promfriends_config_path}}/ca.crt"
+        url: "https://{{pushgateway_health_host}}:{{pushgateway_port}}/-/ready"
+        ca_path: "{{pushgateway_server_ca}}"
         client_cert: "{{promfriends_config_path}}/server.crt"
         client_key: "{{promfriends_config_path}}/server.key"
       register: core_status
