@@ -39,7 +39,7 @@
         key: "{{cadvisor_docker_group}}"
 
     - set_fact:
-        cadvisor_docker_gid: "{{getent_group[cadvisor_docker_group][1]}}"
+        cadvisor_docker_gid: "{{ansible_facts['getent_group'][cadvisor_docker_group][1]}}"
 
     - include_tasks: "docker.yml"
       vars:

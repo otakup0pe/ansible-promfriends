@@ -1,6 +1,6 @@
 ---
 # Configuration shared throughout the promfriends role
-promfriends_docker_host: "{{ansible_fqdn}}"
+promfriends_docker_host: "{{ansible_facts['fqdn']}}"
 promfriends_docker_cacert_path: >
   {{lookup('env', 'HOME') + '/.docker/machines/machine/local/ca.pem'}}
 promfriends_docker_key_path: >

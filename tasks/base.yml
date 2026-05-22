@@ -68,7 +68,7 @@
     key: "{{prometheus_container_user}}"
 
 - set_fact:
-    prometheus_container_uid: "{{getent_passwd[prometheus_container_user][1]}}"
+    prometheus_container_uid: "{{ansible_facts['getent_passwd'][prometheus_container_user][1]}}"
 
 - name: "get group id"
   getent:
@@ -76,4 +76,4 @@
     key: "{{prometheus_container_group}}"
 
 - set_fact:
-    prometheus_container_gid: "{{getent_group[prometheus_container_group][1]}}"
+    prometheus_container_gid: "{{ansible_facts['getent_group'][prometheus_container_group][1]}}"

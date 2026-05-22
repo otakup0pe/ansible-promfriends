@@ -5,7 +5,7 @@
     promnode_file: "{{promnode_arm7l_file}}"
     promnode_archive: "{{promnode_cache_path}}/{{promnode_arm7l_file}}"
     promnode_binary: "{{promnode_binary_prefix}}-armv7/node_exporter"
-  when: ansible_architecture == "armv7l"
+  when: ansible_facts['architecture'] == "armv7l"
 
 - name: "set amd64 vars"
   set_fact:
@@ -13,7 +13,7 @@
     promnode_file: "{{promnode_amd64_file}}"
     promnode_archive: "{{promnode_cache_path}}/{{promnode_amd64_file}}"
     promnode_binary: "{{promnode_binary_prefix}}-amd64/node_exporter"
-  when: ansible_architecture == "x86_64"
+  when: ansible_facts['architecture'] == "x86_64"
 
 - name: "set arm6l vars"
   set_fact:
@@ -21,7 +21,7 @@
     promnode_file: "{{promnode_arm6l_file}}"
     promnode_archive: "{{promnode_cache_path}}/{{promnode_arm6l_file}}"
     promnode_binary: "{{promnode_binary_prefix}}-armv6/node_exporter"
-  when: ansible_architecture == "armv6l"
+  when: ansible_facts['architecture'] == "armv6l"
 
 - name: "set arm64 vars"
   set_fact:
@@ -29,11 +29,11 @@
     promnode_file: "{{promnode_arm64_file}}"
     promnode_archive: "{{promnode_cache_path}}/{{promnode_arm64_file}}"
     promnode_binary: "{{promnode_binary_prefix}}-arm64/node_exporter"
-  when: ansible_architecture == "aarch64"
+  when: ansible_facts['architecture'] == "aarch64"
 
 - name: "check for supported arch"
   fail:
-    msg: "unsupported arch {{ ansible_architecture }}"
+    msg: "unsupported arch {{ ansible_facts['architecture'] }}"
   when: promnode_url|default('') == ''
 
 - name: "ensure node exporter gruop"
