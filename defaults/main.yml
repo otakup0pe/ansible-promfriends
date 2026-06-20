@@ -15,6 +15,7 @@ promfriends_sites: {}
 promfriends_certs_changed: false
 promfriends_logdriver: "json"  # or journald or whatever
 promfriends_rule_configs: []
+promfriends_extra_hosts: {}
 
 # Configuration for Prometheus itself
 prometheus_container_user: "docker"

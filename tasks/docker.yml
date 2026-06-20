@@ -46,6 +46,7 @@
     capabilities: "{{caps|default(omit)}}"
     env: "{{use_env|default(omit)}}"
     dns_servers: "{{promfriends_dns_servers|default(omit)}}"
+    etc_hosts: "{{promfriends_extra_hosts|default({}) or omit}}"
     labels: "{{labels|default(omit)}}"
     validate_certs: true
     user: "{{user|default(prometheus_container_uid)}}"
