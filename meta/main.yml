@@ -4,6 +4,8 @@ dependencies:
     python_uv_install: true
     when: promnode_pkg_exporter | default(true)
 galaxy_info:
+  namespace: otakup0pe
+  role_name: promfriends
   author: Jonathan Freedman
   license: MIT
   galaxy_tags:

@@ -127,7 +127,7 @@
     - name: "generate rule files"
       template:
         src: "{{item.template}}"
-        dest: "{{promfriends_config_path}}/{{(item.template|basename|splitext)[0]}}\
+        dest: "{{promfriends_config_path}}/{{((item.template|basename|splitext)[0]|splitext)[0]}}\
         _rule.yml"
         owner: "{{prometheus_container_user}}"
         group: "{{prometheus_container_group}}"
@@ -139,7 +139,7 @@
 
     - name: "remove rule files"
       file:
-        path: "{{promfriends_config_path}}/{{(item.template|basename|splitext)[0]}}\
+        path: "{{promfriends_config_path}}/{{((item.template|basename|splitext)[0]|splitext)[0]}}\
         _rule.yml"
         state: "absent"
       loop: "{{promfriends_rule_configs}}"

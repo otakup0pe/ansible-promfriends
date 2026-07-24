@@ -55,26 +55,44 @@
         mode: "0640"
       register: alertmanager_config
 
+    - name: "generate alertmanager cluster tls config"
+      template:
+        src: "cluster_tls.yml.j2"
+        dest: "{{promfriends_config_path}}/cluster_tls.yml"
+        owner: "{{prometheus_container_user}}"
+        group: "{{prometheus_container_group}}"
+        mode: "0640"
+      register: alertmanager_cluster_tls_config
+      when:
+        - alertmanager_cluster_peers | length > 0
+        - alertmanager_cluster_tls_enabled | bool
+
+    - name: "assemble optional alertmanager cluster args + tls volumes"
+      set_fact:
+        _alertmanager_cluster_args: "{% if alertmanager_cluster_peers | length > 0 %}--cluster.listen-address={{alertmanager_cluster_listen_address}} --cluster.advertise-address={{alertmanager_cluster_advertise_address}}{% if alertmanager_cluster_tls_enabled | bool %} --cluster.tls-config=/cluster_tls.yml{% endif %}{% for peer in alertmanager_cluster_peers %} --cluster.peer={{peer}}{% endfor %}{% endif %}"
+        _alertmanager_extra_volumes: "{{ ([promfriends_config_path ~ '/cluster_tls.yml:/cluster_tls.yml:ro'] + alertmanager_cluster_tls_volumes) if (alertmanager_cluster_peers | length > 0 and alertmanager_cluster_tls_enabled | bool) else [] }}"
+
     - include_tasks: "docker.yml"
       vars:
         context: "alertmanager"
         image: "{{alertmanager_image}}"
-        publish: "{{alertmanager_publish}}"
+        publish: "{{alertmanager_publish + (alertmanager_cluster_publish if alertmanager_cluster_peers | length > 0 else [])}}"
         use_command: >-
           --config.file=/alertmanager.yml
           --web.config.file=/web_config.yml
           --web.listen-address={{prometheus_address}}:{{alertmanager_port}}
           --web.external-url={{alertmanager_external_url}}
           --storage.path=/data
-          --data.retention={{alertmanager_retention}}
-        volume:
-          - "{{promfriends_config_path}}/web_config.yml:/web_config.yml:ro"
-          - "{{promfriends_config_path}}/alertmanager.yml:/alertmanager.yml:ro"
-          - "{{alertmanager_data_path}}:/data:rw"
-          - "{{promfriends_config_path}}/server.crt:/server.crt:ro"
-          - "{{promfriends_config_path}}/server.key:/server.key:ro"
-          - "{{promfriends_config_path}}/ca.crt:/ca.crt:ro"
-        changed: "{{alertmanager_config.changed|default(false) or promfriends_certs_changed}}"
+          --data.retention={{alertmanager_retention}}{{ ' ' ~ _alertmanager_cluster_args if _alertmanager_cluster_args else '' }}
+        volume: >-
+          {{ [promfriends_config_path ~ '/web_config.yml:/web_config.yml:ro',
+              promfriends_config_path ~ '/alertmanager.yml:/alertmanager.yml:ro',
+              alertmanager_data_path ~ ':/data:rw',
+              promfriends_config_path ~ '/server.crt:/server.crt:ro',
+              promfriends_config_path ~ '/server.key:/server.key:ro',
+              promfriends_config_path ~ '/ca.crt:/ca.crt:ro']
+             + _alertmanager_extra_volumes }}
+        changed: "{{alertmanager_config.changed|default(false) or alertmanager_cluster_tls_config.changed|default(false) or promfriends_certs_changed}}"
 
     - name: "ensure alertmanager container is running"
       uri:

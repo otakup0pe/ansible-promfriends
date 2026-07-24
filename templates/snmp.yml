@@ -1,13 +1,75 @@
 ---
-edgerouter:
-  version: 2
-  auth:
-    community: "{{promsnmp_v2_community}}"
-  walk:
-{% for walk in promsnmp_walk %}
-{'    '}- {{walk}}
-{% endfor %}
-  metrics:
-{% for oid in promsnmp_oid %}
-{'    '}- {{oid | to_nice_yaml(indent=4,sort_keys=False) | indent(4, False) }}
-{% endfor %}
+# {{ ansible_managed }}
+#
+# snmp_exporter configuration -- splits connection/auth settings (auths)
+# from the walk/metric mappings (modules).
+#
+# Scrape URL form:
+#   /snmp?auth=<auth>&module=<module>&target=<device-ip>
+# e.g. /snmp?auth=public_v2&module=if_mib&target=192.0.2.1
+#
+# This is a minimal, hand-maintained base. For large or device-specific
+# configs, prefer the upstream snmp_exporter generator workflow.
+
+auths:
+  public_v1:
+    community: "{{ promsnmp_v1_community }}"
+    version: 1
+  public_v2:
+    community: "{{ promsnmp_v2_community }}"
+    version: 2
+
+modules:
+  # Standard interface counters (IF-MIB) plus the system group.
+  if_mib:
+    walk:
+      - 1.3.6.1.2.1.1        # system
+      - 1.3.6.1.2.1.2.2      # ifTable
+      - 1.3.6.1.2.1.31.1.1   # ifXTable
+    metrics:
+      - name: sysUpTime
+        oid: 1.3.6.1.2.1.1.3
+        type: gauge
+      - name: ifNumber
+        oid: 1.3.6.1.2.1.2.1
+        type: gauge
+      - name: ifIndex
+        oid: 1.3.6.1.2.1.2.2.1.1
+        type: gauge
+        indexes:
+          - labelname: ifIndex
+            type: gauge
+      - name: ifDescr
+        oid: 1.3.6.1.2.1.2.2.1.2
+        type: DisplayString
+        indexes:
+          - labelname: ifIndex
+            type: gauge
+      - name: ifOperStatus
+        oid: 1.3.6.1.2.1.2.2.1.8
+        type: gauge
+        indexes:
+          - labelname: ifIndex
+            type: gauge
+      - name: ifHCInOctets
+        oid: 1.3.6.1.2.1.31.1.1.1.6
+        type: counter
+        indexes:
+          - labelname: ifIndex
+            type: gauge
+        lookups:
+          - labels: [ifIndex]
+            labelname: ifName
+            oid: 1.3.6.1.2.1.31.1.1.1.1
+            type: DisplayString
+      - name: ifHCOutOctets
+        oid: 1.3.6.1.2.1.31.1.1.1.10
+        type: counter
+        indexes:
+          - labelname: ifIndex
+            type: gauge
+        lookups:
+          - labels: [ifIndex]
+            labelname: ifName
+            oid: 1.3.6.1.2.1.31.1.1.1.1
+            type: DisplayString

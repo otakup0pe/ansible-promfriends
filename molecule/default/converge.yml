@@ -1,0 +1,13 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    # Node-only scenario: native node_exporter (systemd), no container
+    # exporters and no pkg_exporter (which would pull in ANXS.python + uv).
+    promfriends_contexts:
+      - node
+    promnode_pkg_exporter: false
+  roles:
+    - role: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | basename }}"

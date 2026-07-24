@@ -22,5 +22,7 @@ alerting:
         key_file: "/server.key"
       static_configs:
         - targets:
-            - "{{inventory_hostname}}:{{alertmanager_port}}"
+{% for am_target in prometheus_alertmanager_targets %}
+            - "{{am_target}}"
+{% endfor %}
 {% endif %}

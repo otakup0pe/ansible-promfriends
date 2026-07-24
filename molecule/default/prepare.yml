@@ -1,0 +1,51 @@
+---
+- name: Prepare
+  hosts: all
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Install prerequisites
+      ansible.builtin.apt:
+        name:
+          - openssl
+          - ca-certificates
+          - curl
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+      when: ansible_facts['os_family'] == "Debian"
+
+    - name: Ensure the docker group exists (role uses docker:docker ownership)
+      ansible.builtin.group:
+        name: docker
+        state: present
+
+    - name: Ensure the prometheus config directory exists
+      ansible.builtin.file:
+        path: /opt/prometheus/etc
+        state: directory
+        mode: "0755"
+
+    # node_exporter is configured for mutual TLS
+    - name: Generate a self-signed TLS cert (also used as the client CA)
+      ansible.builtin.command:
+        cmd: >-
+          openssl req -x509 -newkey rsa:2048 -nodes
+          -keyout /opt/prometheus/etc/server.key
+          -out /opt/prometheus/etc/server.crt
+          -days 825
+          -subj "/CN={{ inventory_hostname }}"
+          -addext "subjectAltName=DNS:{{ inventory_hostname }},DNS:localhost,IP:127.0.0.1"
+        creates: /opt/prometheus/etc/server.crt
+
+    - name: Publish the cert as the CA (self-signed cert is its own CA)
+      ansible.builtin.copy:
+        src: /opt/prometheus/etc/server.crt
+        dest: /opt/prometheus/etc/ca.crt
+        remote_src: true
+        mode: "0644"
+
+    - name: Restrict the private key
+      ansible.builtin.file:
+        path: /opt/prometheus/etc/server.key
+        mode: "0640"

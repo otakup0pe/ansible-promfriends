@@ -1,0 +1,17 @@
+---
+profile: min
+
+exclude_paths:
+  - .cache/
+  - .github/
+  - .venv/
+  - molecule/*/tests/
+
+offline: false
+
+mock_roles:
+  - ANXS.python
+
+warn_list:
+  - experimental
+  - yaml[truthy]
