@@ -20,6 +20,17 @@
         name: docker
         state: present
 
+    # Reproduce a node-only host which has Docker installed. The role's base
+    # probe must see Docker as available without allowing container cleanup
+    # tasks to touch a remote Docker API.
+    - name: Stub Docker availability for node-only dispatch coverage
+      ansible.builtin.copy:
+        dest: /usr/local/bin/docker
+        content: |
+          #!/bin/sh
+          exit 0
+        mode: "0755"
+
     - name: Ensure the prometheus config directory exists
       ansible.builtin.file:
         path: /opt/prometheus/etc

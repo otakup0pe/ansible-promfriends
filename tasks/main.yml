@@ -2,16 +2,22 @@
 - include_tasks: "base.yml"
 
 - include_tasks: "snmp.yml"
+  when: promfriends_contexts | default([]) | difference(['node']) | length > 0
 
 - include_tasks: "blackbox.yml"
+  when: promfriends_contexts | default([]) | difference(['node']) | length > 0
 
 - include_tasks: "cadvisor.yml"
+  when: promfriends_contexts | default([]) | difference(['node']) | length > 0
 
 - include_tasks: "push.yml"
+  when: promfriends_contexts | default([]) | difference(['node']) | length > 0
 
 - include_tasks: "node.yml"
   when: '"node" in promfriends_contexts|default([])'
 
 - include_tasks: "alerts.yml"
+  when: promfriends_contexts | default([]) | difference(['node']) | length > 0
 
 - include_tasks: "core.yml"
+  when: promfriends_contexts | default([]) | difference(['node']) | length > 0
