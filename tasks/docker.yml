@@ -16,6 +16,7 @@
       published_ports: "strict"
       volumes: "allow_more_present"
       env: "allow_more_present"
+      dns_servers: "strict"
     recreate: "{{changed|default(false)}}"
     published_ports: "{{publish|default(omit)}}"
     restart_policy: "unless-stopped"
