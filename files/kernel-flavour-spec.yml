@@ -1,0 +1,39 @@
+---
+# Compare kernels only within the running flavour; Debian ordering across
+# flavour suffixes is meaningless. Unknown families must not guess.
+
+kernel_flavour_families:
+  debian:
+    layout: "<version>[-<abi>]-<flavour>"
+    rule: "the component after the LAST hyphen"
+    # Split at the final hyphen so ABI changes do not change flavour.
+
+# Representative release-name shapes; this is not an exhaustive kernel list.
+kernel_flavour_vectors:
+  - release: "6.12.95+deb13-amd64"
+    family: "debian"
+    flavour: "amd64"
+  - release: "6.12.95+deb13-arm64"
+    family: "debian"
+    flavour: "arm64"
+  - release: "6.8.0-31-generic"
+    family: "debian"
+    flavour: "generic"
+  - release: "6.8.0-32-generic"
+    family: "debian"
+    flavour: "generic"
+  - release: "6.8.0-31-lowlatency"
+    family: "debian"
+    flavour: "lowlatency"
+  - release: "6.18.50+rpt-rpi-2712"
+    family: "debian"
+    flavour: "2712"
+  - release: "6.18.50+rpt-rpi-v8"
+    family: "debian"
+    flavour: "v8"
+  - release: "6.12.47+rpt-rpi-v8"
+    family: "debian"
+    flavour: "v8"
+  - release: "6.18.50+rpt-rpi-v8-16k"
+    family: "debian"
+    flavour: "16k"

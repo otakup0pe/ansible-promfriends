@@ -1,119 +1,303 @@
 ---
-- name: "validate pkg_exporter scheduler choice"
-  ansible.builtin.assert:
-    that:
-      - promnode_pkg_exporter_scheduler in ["systemd", "cron"]
-    fail_msg: >-
-      promnode_pkg_exporter_scheduler must be 'systemd' or 'cron',
-      got: {{ promnode_pkg_exporter_scheduler }}
+- block:
+    - name: "sanity-check the pkg-exporter install path before removing it"
+      ansible.builtin.assert:
+        that:
+          - promnode_pkg_exporter_install_path is string
+          - promnode_pkg_exporter_install_path.startswith("/")
+          - >-
+            promnode_pkg_exporter_install_path.split("/")
+            | reject("equalto", "") | list | length >= 2
+          - '".." not in promnode_pkg_exporter_install_path.split("/")'
+          - '"." not in promnode_pkg_exporter_install_path.split("/")'
+        fail_msg: >-
+          refusing to recursively remove promnode_pkg_exporter_install_path
+          ({{ promnode_pkg_exporter_install_path }}): it must be an absolute
+          path at least two levels below /
 
-- name: "ensure uv-managed venv for pkg-exporter (with system site-packages)"
-  ansible.builtin.command:
-    cmd: >-
-      uv venv --system-site-packages
-      {{promnode_pkg_exporter_install_path}}
-    creates: "{{promnode_pkg_exporter_install_path}}/bin/python"
+    - name: "stop and disable textfile exporter units"
+      ansible.builtin.systemd_service:
+        name: "{{item}}"
+        state: "stopped"
+        enabled: false
+      loop:
+        - "promnode-pkg-exporter.timer"
+        - "promnode-pkg-exporter.service"
+        - "promnode-kernel-metrics.timer"
+        - "promnode-kernel-metrics.service"
+      failed_when: false
 
-- name: "install pkg-exporter into the uv venv"
-  ansible.builtin.command:
-    cmd: >-
-      uv pip install
-      --python {{promnode_pkg_exporter_install_path}}/bin/python
-      pkg-exporter
-    creates: "{{promnode_pkg_exporter_install_path}}/bin/pkg-exporter"
+    - name: "remove pkg-exporter cron entry"
+      ansible.builtin.cron:
+        name: "promfriend node pkg-exporter"
+        state: "absent"
+      failed_when: false
 
-- name: "deploy promnode pkg-exporter systemd service"
-  ansible.builtin.template:
-    src: "promnode-pkg-exporter.service.j2"
-    dest: "/etc/systemd/system/promnode-pkg-exporter.service"
-    owner: "root"
-    group: "root"
-    mode: "0644"
-  register: promnode_pkg_exporter_service
-  when: promnode_pkg_exporter_scheduler == "systemd"
+    - name: "remove textfile exporter artifacts"
+      ansible.builtin.file:
+        path: "{{item}}"
+        state: "absent"
+      loop:
+        - "{{promnode_pkg_exporter_install_path}}"
+        - "{{promnode_kernel_metrics_install_path}}/promnode-kernel-metrics.sh"
+        - "{{promnode_text_path}}/pkg-exporter.prom"
+        - "{{promnode_text_path}}/kernel-metrics.prom"
 
-- name: "deploy promnode pkg-exporter systemd timer"
-  ansible.builtin.template:
-    src: "promnode-pkg-exporter.timer.j2"
-    dest: "/etc/systemd/system/promnode-pkg-exporter.timer"
-    owner: "root"
-    group: "root"
-    mode: "0644"
-  register: promnode_pkg_exporter_timer
-  when: promnode_pkg_exporter_scheduler == "systemd"
+    - name: "remove textfile exporter systemd units"
+      ansible.builtin.file:
+        path: "/etc/systemd/system/{{item}}"
+        state: "absent"
+      loop:
+        - "promnode-pkg-exporter.timer"
+        - "promnode-pkg-exporter.service"
+        - "promnode-kernel-metrics.timer"
+        - "promnode-kernel-metrics.service"
+      register: promnode_textfile_exporter_units_removed
 
-- name: "reload systemd if pkg-exporter units changed"
-  ansible.builtin.systemd:
-    daemon_reload: true
-  when:
-    - promnode_pkg_exporter_scheduler == "systemd"
-    - promnode_pkg_exporter_service.changed or promnode_pkg_exporter_timer.changed
+    - name: "reload systemd after removing textfile exporter units"
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+      when: promnode_textfile_exporter_units_removed.changed
+  when: promnode_textfile_exporters_state == "absent"
 
-- name: "enable and start promnode pkg-exporter timer"
-  ansible.builtin.systemd:
-    name: "promnode-pkg-exporter.timer"
-    enabled: true
-    state: "started"
-  when: promnode_pkg_exporter_scheduler == "systemd"
+- block:
+    - name: "validate pkg_exporter scheduler choice"
+      ansible.builtin.assert:
+        that:
+          - promnode_pkg_exporter_scheduler in ["systemd", "cron"]
+          - >-
+            promnode_pkg_exporter_scheduler != "systemd" or
+            promnode_pkg_exporter_onactivesec | string | length > 0
+          - >-
+            promnode_pkg_exporter_scheduler != "systemd" or
+            promnode_pkg_exporter_accuracysec | string | length > 0
+        fail_msg: >-
+          promnode_pkg_exporter_scheduler must be 'systemd' or 'cron', and
+          systemd timers require non-empty onactivesec and accuracysec values
 
-- name: "restart promnode pkg-exporter timer if units changed"
-  ansible.builtin.systemd:
-    name: "promnode-pkg-exporter.timer"
-    state: "restarted"
-  when:
-    - promnode_pkg_exporter_scheduler == "systemd"
-    - promnode_pkg_exporter_service.changed or promnode_pkg_exporter_timer.changed
+    # Stale venvs may exist but fail to import the dpkg-provided apt module.
+    - name: "probe whether the pkg-exporter venv can import apt"
+      ansible.builtin.command:
+        argv:
+          - "{{promnode_pkg_exporter_install_path}}/bin/python"
+          - "-c"
+          - "import apt"
+      register: promnode_pkg_exporter_apt_probe
+      changed_when: false
+      failed_when: false
 
-# scheduler == cron: install the cron entry, clean up systemd units.
-- name: "install pkg-exporter cron entry"
-  ansible.builtin.cron:
-    name: "promfriend node pkg-exporter"
-    minute: "{{ promnode_pkg_exporter_cron_minute }}"
-    hour: "{{ promnode_pkg_exporter_cron_hour }}"
-    day: "{{ promnode_pkg_exporter_cron_day }}"
-    month: "{{ promnode_pkg_exporter_cron_month }}"
-    weekday: "{{ promnode_pkg_exporter_cron_weekday }}"
-    job: >-
-      PKG_EXPORTER_FILE={{promnode_text_path}}/pkg-exporter.prom
-      {{promnode_pkg_exporter_install_path}}/bin/pkg-exporter
-  when: promnode_pkg_exporter_scheduler == "cron"
+    - name: "probe the pkg-exporter venv interpreter version"
+      ansible.builtin.command:
+        argv:
+          - "{{promnode_pkg_exporter_install_path}}/bin/python"
+          - "-c"
+          - "import sys; print('%d.%d' % sys.version_info[:2])"
+      register: promnode_pkg_exporter_venv_python
+      changed_when: false
+      failed_when: false
 
-- name: "stop promnode pkg-exporter timer (scheduler != systemd)"
-  ansible.builtin.systemd:
-    name: "promnode-pkg-exporter.timer"
-    state: "stopped"
-    enabled: false
-  failed_when: false
-  when: promnode_pkg_exporter_scheduler != "systemd"
+    - name: "probe the system interpreter version"
+      ansible.builtin.command:
+        argv:
+          - "python3"
+          - "-c"
+          - "import sys; print('%d.%d' % sys.version_info[:2])"
+      register: promnode_pkg_exporter_system_python
+      changed_when: false
 
-- name: "remove promnode pkg-exporter systemd units (scheduler != systemd)"
-  ansible.builtin.file:
-    path: "/etc/systemd/system/{{ item }}"
-    state: "absent"
-  loop:
-    - "promnode-pkg-exporter.timer"
-    - "promnode-pkg-exporter.service"
-  register: promnode_pkg_exporter_units_removed
-  when: promnode_pkg_exporter_scheduler != "systemd"
+    # Keep this fact boolean; a string "False" is truthy in later conditions.
+    - name: "set pkg-exporter venv health fact"
+      ansible.builtin.set_fact:
+        promnode_pkg_exporter_venv_broken: >-
+          {{ (promnode_pkg_exporter_apt_probe.rc != 0
+          or promnode_pkg_exporter_venv_python.rc != 0
+          or (promnode_pkg_exporter_venv_python.stdout | trim)
+          != (promnode_pkg_exporter_system_python.stdout | trim)) | bool }}
 
-- name: "reload systemd after removing pkg-exporter units"
-  ansible.builtin.systemd:
-    daemon_reload: true
-  when:
-    - promnode_pkg_exporter_scheduler != "systemd"
-    - promnode_pkg_exporter_units_removed.changed
+    # This operator-controlled path is removed recursively, so reject broad paths.
+    - name: "sanity-check the pkg-exporter install path before removing it"
+      ansible.builtin.assert:
+        that:
+          - promnode_pkg_exporter_install_path is string
+          - promnode_pkg_exporter_install_path.startswith("/")
+          - >-
+            promnode_pkg_exporter_install_path.split("/")
+            | reject("equalto", "") | list | length >= 2
+          - '".." not in promnode_pkg_exporter_install_path.split("/")'
+          - '"." not in promnode_pkg_exporter_install_path.split("/")'
+        fail_msg: >-
+          refusing to recursively remove promnode_pkg_exporter_install_path
+          ({{ promnode_pkg_exporter_install_path }}): it must be an absolute
+          path at least two levels below /
+      when: promnode_pkg_exporter_venv_broken
 
-# scheduler == systemd: legacy cleanup of any prior cron entry.
-- name: "check for crontab binary"
-  ansible.builtin.stat:
-    path: "/usr/bin/crontab"
-  register: promnode_pkg_exporter_crontab
-  when: promnode_pkg_exporter_scheduler == "systemd"
+    - name: "remove the unusable pkg-exporter venv"
+      ansible.builtin.file:
+        path: "{{promnode_pkg_exporter_install_path}}"
+        state: absent
+      when: promnode_pkg_exporter_venv_broken | bool
 
-- name: "remove legacy pkg-exporter cron entry (scheduler == systemd)"
-  ansible.builtin.cron:
-    name: "promfriend node pkg-exporter"
-    state: "absent"
-  when:
-    - promnode_pkg_exporter_scheduler == "systemd"
-    - promnode_pkg_exporter_crontab.stat.exists
+    # Pin the system interpreter so --system-site-packages exposes python3-apt.
+    - name: "ensure uv-managed venv for pkg-exporter (with system site-packages)"
+      ansible.builtin.command:
+        cmd: >-
+          uv venv --system-site-packages
+          --python python{{promnode_pkg_exporter_system_python.stdout | trim}}
+          {{promnode_pkg_exporter_install_path}}
+        creates: "{{promnode_pkg_exporter_install_path}}/bin/python"
+
+    - name: "install pkg-exporter into the uv venv"
+      ansible.builtin.command:
+        cmd: >-
+          uv pip install
+          --python {{promnode_pkg_exporter_install_path}}/bin/python
+          pkg-exporter
+        creates: "{{promnode_pkg_exporter_install_path}}/bin/pkg-exporter"
+
+    - name: "verify the rebuilt pkg-exporter venv can import apt"
+      ansible.builtin.command:
+        argv:
+          - "{{promnode_pkg_exporter_install_path}}/bin/python"
+          - "-c"
+          - "import apt"
+      register: promnode_pkg_exporter_apt_verify
+      changed_when: false
+      failed_when: promnode_pkg_exporter_apt_verify.rc != 0
+      when: promnode_pkg_exporter_venv_broken | bool
+
+    - name: "deploy promnode pkg-exporter systemd service"
+      ansible.builtin.template:
+        src: "promnode-pkg-exporter.service.j2"
+        dest: "/etc/systemd/system/promnode-pkg-exporter.service"
+        owner: "root"
+        group: "root"
+        mode: "0644"
+      register: promnode_pkg_exporter_service
+      when: promnode_pkg_exporter_scheduler == "systemd"
+
+    - name: "deploy promnode pkg-exporter systemd timer"
+      ansible.builtin.template:
+        src: "promnode-pkg-exporter.timer.j2"
+        dest: "/etc/systemd/system/promnode-pkg-exporter.timer"
+        owner: "root"
+        group: "root"
+        mode: "0644"
+      register: promnode_pkg_exporter_timer
+      when: promnode_pkg_exporter_scheduler == "systemd"
+
+    - name: "reload systemd if pkg-exporter units changed"
+      ansible.builtin.systemd:
+        daemon_reload: true
+      when:
+        - promnode_pkg_exporter_scheduler == "systemd"
+        - promnode_pkg_exporter_service.changed or promnode_pkg_exporter_timer.changed
+
+    - name: "enable and start promnode pkg-exporter timer"
+      ansible.builtin.systemd:
+        name: "promnode-pkg-exporter.timer"
+        enabled: true
+        state: "started"
+      when: promnode_pkg_exporter_scheduler == "systemd"
+
+    - name: "restart promnode pkg-exporter timer if units changed"
+      ansible.builtin.systemd:
+        name: "promnode-pkg-exporter.timer"
+        state: "restarted"
+      when:
+        - promnode_pkg_exporter_scheduler == "systemd"
+        - promnode_pkg_exporter_service.changed or promnode_pkg_exporter_timer.changed
+
+    - name: "install pkg-exporter cron entry"
+      ansible.builtin.cron:
+        name: "promfriend node pkg-exporter"
+        minute: "{{ promnode_pkg_exporter_cron_minute }}"
+        hour: "{{ promnode_pkg_exporter_cron_hour }}"
+        day: "{{ promnode_pkg_exporter_cron_day }}"
+        month: "{{ promnode_pkg_exporter_cron_month }}"
+        weekday: "{{ promnode_pkg_exporter_cron_weekday }}"
+        job: >-
+          PKG_EXPORTER_FILE={{promnode_text_path}}/pkg-exporter.prom
+          {{promnode_pkg_exporter_install_path}}/bin/pkg-exporter
+      when: promnode_pkg_exporter_scheduler == "cron"
+
+    - name: "stop promnode pkg-exporter timer (scheduler != systemd)"
+      ansible.builtin.systemd:
+        name: "promnode-pkg-exporter.timer"
+        state: "stopped"
+        enabled: false
+      failed_when: false
+      when: promnode_pkg_exporter_scheduler != "systemd"
+
+    - name: "remove promnode pkg-exporter systemd units (scheduler != systemd)"
+      ansible.builtin.file:
+        path: "/etc/systemd/system/{{ item }}"
+        state: "absent"
+      loop:
+        - "promnode-pkg-exporter.timer"
+        - "promnode-pkg-exporter.service"
+      register: promnode_pkg_exporter_units_removed
+      when: promnode_pkg_exporter_scheduler != "systemd"
+
+    - name: "reload systemd after removing pkg-exporter units"
+      ansible.builtin.systemd:
+        daemon_reload: true
+      when:
+        - promnode_pkg_exporter_scheduler != "systemd"
+        - promnode_pkg_exporter_units_removed.changed
+
+    # Some images ship crontab without a usable spool; cleanup is best-effort.
+    - name: "remove legacy pkg-exporter cron entry (scheduler == systemd)"
+      ansible.builtin.cron:
+        name: "promfriend node pkg-exporter"
+        state: "absent"
+      failed_when: false
+      when: promnode_pkg_exporter_scheduler == "systemd"
+
+    # Kernel metrics use a separate timer because they need no package database.
+    - name: "deploy promnode kernel-metrics collector"
+      ansible.builtin.template:
+        src: "promnode-kernel-metrics.sh.j2"
+        dest: "{{promnode_kernel_metrics_install_path}}/promnode-kernel-metrics.sh"
+        owner: "root"
+        group: "root"
+        mode: "0755"
+      register: promnode_kernel_metrics_script
+
+    - name: "deploy promnode kernel-metrics systemd units"
+      ansible.builtin.template:
+        src: "promnode-kernel-metrics.{{item}}.j2"
+        dest: "/etc/systemd/system/promnode-kernel-metrics.{{item}}"
+        owner: "root"
+        group: "root"
+        mode: "0644"
+      loop:
+        - "service"
+        - "timer"
+      register: promnode_kernel_metrics_units
+
+    - name: "reload systemd if kernel-metrics units changed"
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+      when: promnode_kernel_metrics_units.changed
+
+    - name: "enable and start promnode kernel-metrics timer"
+      ansible.builtin.systemd_service:
+        name: "promnode-kernel-metrics.timer"
+        enabled: true
+        state: "started"
+
+    - name: "restart promnode kernel-metrics timer if units changed"
+      ansible.builtin.systemd_service:
+        name: "promnode-kernel-metrics.timer"
+        state: "restarted"
+      when: promnode_kernel_metrics_units.changed
+
+    # Publish immediately because the output path is volatile.
+    - name: "publish kernel metrics now"
+      ansible.builtin.systemd_service:
+        name: "promnode-kernel-metrics.service"
+        state: "started"
+      when: >-
+        promnode_kernel_metrics_script.changed
+        or promnode_kernel_metrics_units.changed
+  when: promnode_textfile_exporters_state == "present"

@@ -1,0 +1,13 @@
+# {{ ansible_managed }}
+[Unit]
+Description=run promfriend node kernel-metrics on schedule
+
+[Timer]
+# Republish boot-specific state instead of persisting it across reboots.
+OnBootSec={{ promnode_kernel_metrics_onbootsec }}
+OnCalendar={{ promnode_kernel_metrics_oncalendar }}{{ ' ' ~ promnode_pkg_exporter_timezone if promnode_pkg_exporter_timezone | default('', true) else '' }}
+AccuracySec={{ promnode_kernel_metrics_accuracysec }}
+Unit=promnode-kernel-metrics.service
+
+[Install]
+WantedBy=timers.target

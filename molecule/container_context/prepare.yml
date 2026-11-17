@@ -1,0 +1,256 @@
+---
+- name: Prepare nested Docker host
+  hosts: all
+  become: true
+  gather_facts: true
+  vars_files:
+    - ../../defaults/main.yml
+  vars:
+    docker_tls_path: /etc/docker/tls
+    controller_cert_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/docker-certs
+  tasks:
+    - name: Install prerequisites
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - docker.io
+          - openssl
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+      when: ansible_facts['os_family'] == "Debian"
+
+    - name: Resolve Docker daemon path
+      ansible.builtin.shell: "command -v dockerd"  # noqa command-instead-of-shell
+      register: docker_daemon_path
+      changed_when: false
+
+    - name: Require an installed Docker daemon
+      ansible.builtin.assert:
+        that:
+          - docker_daemon_path.stdout | trim | length > 0
+        fail_msg: "docker.io did not install dockerd on PATH"
+
+    - name: Create Docker TLS directory
+      ansible.builtin.file:
+        path: "{{ docker_tls_path }}"
+        state: directory
+        mode: "0700"
+
+    - name: Create Docker systemd override directory
+      ansible.builtin.file:
+        path: /etc/systemd/system/docker.service.d
+        state: directory
+        mode: "0755"
+
+    - name: Generate Docker CA
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - req
+          - -x509
+          - -newkey
+          - rsa:2048
+          - -nodes
+          - -keyout
+          - "{{ docker_tls_path }}/ca-key.pem"
+          - -out
+          - "{{ docker_tls_path }}/ca.pem"
+          - -days
+          - "2"
+          - -subj
+          - /CN=molecule-docker-ca
+        creates: "{{ docker_tls_path }}/ca.pem"
+
+    - name: Generate Docker server key and CSR
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - req
+          - -newkey
+          - rsa:2048
+          - -nodes
+          - -keyout
+          - "{{ docker_tls_path }}/server-key.pem"
+          - -out
+          - "{{ docker_tls_path }}/server.csr"
+          - -subj
+          - /CN=127.0.0.1
+        creates: "{{ docker_tls_path }}/server.csr"
+
+    - name: Write Docker server certificate extensions
+      ansible.builtin.copy:
+        dest: "{{ docker_tls_path }}/server-ext.cnf"
+        content: |
+          subjectAltName = IP:127.0.0.1
+          extendedKeyUsage = serverAuth
+        mode: "0600"
+
+    - name: Sign Docker server certificate
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - x509
+          - -req
+          - -in
+          - "{{ docker_tls_path }}/server.csr"
+          - -CA
+          - "{{ docker_tls_path }}/ca.pem"
+          - -CAkey
+          - "{{ docker_tls_path }}/ca-key.pem"
+          - -CAcreateserial
+          - -out
+          - "{{ docker_tls_path }}/server-cert.pem"
+          - -days
+          - "2"
+          - -sha256
+          - -extfile
+          - "{{ docker_tls_path }}/server-ext.cnf"
+        creates: "{{ docker_tls_path }}/server-cert.pem"
+
+    - name: Generate Docker client key and CSR
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - req
+          - -newkey
+          - rsa:2048
+          - -nodes
+          - -keyout
+          - "{{ docker_tls_path }}/key.pem"
+          - -out
+          - "{{ docker_tls_path }}/client.csr"
+          - -subj
+          - /CN=molecule-client
+        creates: "{{ docker_tls_path }}/client.csr"
+
+    - name: Write Docker client certificate extensions
+      ansible.builtin.copy:
+        dest: "{{ docker_tls_path }}/client-ext.cnf"
+        content: |
+          extendedKeyUsage = clientAuth
+        mode: "0600"
+
+    - name: Sign Docker client certificate
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - x509
+          - -req
+          - -in
+          - "{{ docker_tls_path }}/client.csr"
+          - -CA
+          - "{{ docker_tls_path }}/ca.pem"
+          - -CAkey
+          - "{{ docker_tls_path }}/ca-key.pem"
+          - -CAcreateserial
+          - -out
+          - "{{ docker_tls_path }}/cert.pem"
+          - -days
+          - "2"
+          - -sha256
+          - -extfile
+          - "{{ docker_tls_path }}/client-ext.cnf"
+        creates: "{{ docker_tls_path }}/cert.pem"
+
+    - name: Configure Docker TLS listener
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/docker.service.d/molecule-tls.conf
+        content: |
+          [Service]
+          ExecStart=
+          ExecStart={{ docker_daemon_path.stdout | trim }} -H fd:// -H tcp://0.0.0.0:2376 \
+            --storage-driver=vfs \
+            --tlsverify \
+            --tlscacert={{ docker_tls_path }}/ca.pem \
+            --tlscert={{ docker_tls_path }}/server-cert.pem \
+            --tlskey={{ docker_tls_path }}/server-key.pem
+        mode: "0644"
+      register: docker_tls_service
+
+    - name: Restart Docker with TLS enabled
+      ansible.builtin.systemd:
+        name: docker
+        state: restarted
+        enabled: true
+        daemon_reload: true
+      when: docker_tls_service.changed
+
+    - name: Ensure Docker is running
+      ansible.builtin.systemd:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Create controller certificate directory
+      ansible.builtin.file:
+        path: "{{ controller_cert_path }}"
+        state: directory
+        mode: "0700"
+      delegate_to: localhost
+      become: false
+
+    - name: Fetch Docker client certificates
+      ansible.builtin.fetch:
+        src: "{{ docker_tls_path }}/{{ item }}"
+        dest: "{{ controller_cert_path }}/{{ item }}"
+        flat: true
+      loop:
+        - ca.pem
+        - cert.pem
+        - key.pem
+
+    - name: Create Prometheus config directory
+      ansible.builtin.file:
+        path: /opt/prometheus/etc
+        state: directory
+        mode: "0755"
+
+    - name: Generate Prometheus test certificate
+      ansible.builtin.command:
+        cmd: >-
+          openssl req -x509 -newkey rsa:2048 -nodes
+          -keyout /opt/prometheus/etc/server.key
+          -out /opt/prometheus/etc/server.crt
+          -days 2
+          -subj "/CN={{ inventory_hostname }}"
+          -addext "subjectAltName=DNS:{{ inventory_hostname }},DNS:localhost,IP:127.0.0.1"
+        creates: /opt/prometheus/etc/server.crt
+
+    - name: Publish Prometheus test CA
+      ansible.builtin.copy:
+        src: /opt/prometheus/etc/server.crt
+        dest: /opt/prometheus/etc/ca.crt
+        remote_src: true
+        mode: "0644"
+
+    - name: Restrict Prometheus private key
+      ansible.builtin.file:
+        path: /opt/prometheus/etc/server.key
+        mode: "0640"
+
+    - name: Seed stale textfile exporter directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ promnode_pkg_exporter_install_path }}"
+        - "{{ promnode_text_path }}"
+
+    - name: Seed stale textfile exporter artifacts
+      ansible.builtin.copy:
+        dest: "{{ item }}"
+        content: "stale\n"
+        mode: "0644"
+      loop:
+        - "{{ promnode_pkg_exporter_install_path }}/stale"
+        - "{{ promnode_kernel_metrics_install_path }}/promnode-kernel-metrics.sh"
+        - "{{ promnode_text_path }}/pkg-exporter.prom"
+        - "{{ promnode_text_path }}/kernel-metrics.prom"
+        - /etc/systemd/system/promnode-pkg-exporter.timer
+        - /etc/systemd/system/promnode-pkg-exporter.service
+        - /etc/systemd/system/promnode-kernel-metrics.timer
+        - /etc/systemd/system/promnode-kernel-metrics.service

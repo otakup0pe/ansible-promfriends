@@ -1,0 +1,14 @@
+---
+- name: "validate declared context ownership"
+  ansible.builtin.assert:
+    that:
+      - promfriends_contexts is defined
+      - (promfriends_contexts | default(none) | type_debug) == "list"
+      - >-
+        promfriends_contexts | default([])
+        | difference(['alerts', 'blackbox', 'cadvisor', 'core',
+                      'node', 'push', 'snmp'])
+        | length == 0
+    fail_msg: >-
+      promfriends_contexts must explicitly list every context this invocation
+      owns; omission cannot authorize cleanup.

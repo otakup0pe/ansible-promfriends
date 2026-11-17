@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+[Unit]
+Description=promfriend node kernel-metrics
+# Reads only uname and {{promnode_kernel_metrics_boot_dir}}.
+
+[Service]
+Type=oneshot
+Environment=KERNEL_METRICS_FILE={{promnode_text_path}}/kernel-metrics.prom
+Environment=KERNEL_METRICS_BOOT_DIR={{promnode_kernel_metrics_boot_dir}}
+ExecStart={{promnode_kernel_metrics_install_path}}/promnode-kernel-metrics.sh

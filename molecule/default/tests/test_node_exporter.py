@@ -1,9 +1,4 @@
-"""testinfra checks for the node-only promfriends scenario.
-
-Asserts the native node_exporter deployment: binary, systemd unit,
-listening port, mutual-TLS web config, supporting group/dirs, and that
-the exporter actually serves metrics over mTLS.
-"""
+"""testinfra checks for the node-only promfriends scenario."""
 
 
 def test_node_exporter_binary(host):
@@ -36,6 +31,44 @@ def test_prometheus_group_exists(host):
 def test_textfiles_directory(host):
     d = host.file("/var/run/promnode/textfiles")
     assert d.is_directory
+
+
+def test_textfiles_directory_ownership_is_declared(host):
+    """Pin ownership so play order cannot silently break producers."""
+    d = host.file("/var/run/promnode/textfiles")
+    assert d.group == "prometheus"
+    # Producers replace one another's files, so the directory cannot be sticky.
+    assert d.mode & 0o020, "textfiles dir is not group-writable (mode %o)" % d.mode
+
+
+def test_textfiles_parent_is_traversable(host):
+    """Producers need traversal through the parent regardless of leaf mode."""
+    d = host.file("/var/run/promnode")
+    assert d.is_directory
+    assert d.mode & 0o001, (
+        "promnode parent is not world-traversable (mode %o); a non-root "
+        "producer cannot reach textfiles/ regardless of the leaf's mode"
+        % d.mode
+    )
+
+
+def test_group_member_can_actually_write_a_textfile(host):
+    """Test producer capability independently of the permission mechanism."""
+    host.run("useradd -r -G prometheus molecule-textfile-writer 2>/dev/null")
+    probe = "/var/run/promnode/textfiles/molecule-write-check.prom"
+    host.run("rm -f %s", probe)
+    cmd = host.run(
+        "su -s /bin/sh -c 'echo molecule_write_check 1 > %s' "
+        "molecule-textfile-writer" % probe
+    )
+    try:
+        assert cmd.rc == 0, (
+            "a prometheus-group member cannot write to the textfile dir: %r"
+            % cmd.stderr
+        )
+        assert host.file(probe).exists
+    finally:
+        host.run("rm -f %s", probe)
 
 
 def test_tls_assets_present(host):

@@ -1,0 +1,231 @@
+---
+- name: "prune integration"
+  hosts: "localhost"
+  connection: "local"
+  gather_facts: false
+  vars:
+    dind_name: "promfriends-prune-dind"
+    dind_net: "promfriends-prune-net"
+    dind_port: 23760
+    certs: "/tmp/promfriends-prune-certs"
+    repo: "prom/prometheus"
+    old: "v3.10.0"
+    cur: "v3.11.2"
+
+    context: "prometheus"
+    image: "prom/prometheus:v3.11.2"
+    promfriends_docker_host: "localhost"
+    promfriends_docker_port: "{{dind_port}}"
+    promfriends_docker_tls_hostname: "localhost"
+    promfriends_docker_cacert_path: "{{certs}}/client/ca.pem"
+    promfriends_docker_cert_path: "{{certs}}/client/cert.pem"
+    promfriends_docker_key_path: "{{certs}}/client/key.pem"
+
+  tasks:
+    - name: "load role variables"
+      ansible.builtin.include_vars:
+        file: "../vars/main.yml"
+
+    - block:
+        - name: "create certificate directory"
+          ansible.builtin.file:
+            path: "{{certs}}"
+            state: "directory"
+            mode: "0700"
+
+        - name: "create private network"
+          community.docker.docker_network:
+            name: "{{dind_net}}"
+            driver: "bridge"
+            state: "present"
+
+        - name: "start dind daemon"
+          community.docker.docker_container:
+            name: "{{dind_name}}"
+            image: "docker:dind"
+            state: "started"
+            privileged: true
+            recreate: true
+            networks:
+              - name: "{{dind_net}}"
+            network_mode: "{{dind_net}}"
+            published_ports:
+              - "127.0.0.1:{{dind_port}}:2376"
+            env:
+              DOCKER_TLS_CERTDIR: "/certs"
+            volumes:
+              - "{{certs}}:/certs"
+
+        - name: "wait for dind client certificates"
+          ansible.builtin.wait_for:
+            path: "{{certs}}/client/{{item}}"
+            timeout: 120
+          loop: ["ca.pem", "cert.pem", "key.pem"]
+
+        - name: "wait for dind api"
+          community.docker.docker_host_info:
+            docker_host: "tcp://localhost:{{dind_port}}"
+            ca_cert: "{{promfriends_docker_cacert_path}}"
+            client_cert: "{{promfriends_docker_cert_path}}"
+            client_key: "{{promfriends_docker_key_path}}"
+            tls_hostname: "localhost"
+            validate_certs: true
+          register: dind_ping
+          until: dind_ping is succeeded
+          retries: 30
+          delay: 4
+
+        - name: "seed current and superseded tags"
+          community.docker.docker_image:
+            docker_host: "tcp://localhost:{{dind_port}}"
+            ca_cert: "{{promfriends_docker_cacert_path}}"
+            client_cert: "{{promfriends_docker_cert_path}}"
+            client_key: "{{promfriends_docker_key_path}}"
+            tls_hostname: "localhost"
+            validate_certs: true
+            name: "{{repo}}:{{item}}"
+            source: "pull"
+          loop: ["{{old}}", "{{cur}}"]
+
+        - name: "create role container on the current tag"
+          community.docker.docker_container:
+            docker_host: "tcp://localhost:{{dind_port}}"
+            ca_cert: "{{promfriends_docker_cacert_path}}"
+            client_cert: "{{promfriends_docker_cert_path}}"
+            client_key: "{{promfriends_docker_key_path}}"
+            tls_hostname: "localhost"
+            validate_certs: true
+            name: "{{context}}"
+            image: "{{repo}}:{{cur}}"
+            command: ["--version"]
+            state: "present"
+
+        - name: "run cleanup with an unused superseded tag"
+          ansible.builtin.include_tasks: "../tasks/docker_cleanup.yml"
+
+        - name: "inventory after first cleanup"
+          community.docker.docker_host_info:
+            docker_host: "tcp://localhost:{{dind_port}}"
+            ca_cert: "{{promfriends_docker_cacert_path}}"
+            client_cert: "{{promfriends_docker_cert_path}}"
+            client_key: "{{promfriends_docker_key_path}}"
+            tls_hostname: "localhost"
+            validate_certs: true
+            images: true
+          register: after
+
+        - name: "collect tags after first cleanup"
+          ansible.builtin.set_fact:
+            found_tags: "{{after.images | map(attribute='RepoTags') | select() | flatten}}"
+
+        - name: "assert unused superseded tag is removed"
+          ansible.builtin.assert:
+            that:
+              - "repo ~ ':' ~ old not in found_tags"
+              - "repo ~ ':' ~ cur in found_tags"
+            fail_msg: "tags after cleanup: {{found_tags}}"
+
+        - name: "remove current role container"
+          community.docker.docker_container:
+            docker_host: "tcp://localhost:{{dind_port}}"
+            ca_cert: "{{promfriends_docker_cacert_path}}"
+            client_cert: "{{promfriends_docker_cert_path}}"
+            client_key: "{{promfriends_docker_key_path}}"
+            tls_hostname: "localhost"
+            validate_certs: true
+            name: "{{context}}"
+            state: "absent"
+
+        - name: "reseed superseded tag"
+          community.docker.docker_image:
+            docker_host: "tcp://localhost:{{dind_port}}"
+            ca_cert: "{{promfriends_docker_cacert_path}}"
+            client_cert: "{{promfriends_docker_cert_path}}"
+            client_key: "{{promfriends_docker_key_path}}"
+            tls_hostname: "localhost"
+            validate_certs: true
+            name: "{{repo}}:{{old}}"
+            source: "pull"
+
+        - name: "create stopped unowned container on superseded tag"
+          community.docker.docker_container:
+            docker_host: "tcp://localhost:{{dind_port}}"
+            ca_cert: "{{promfriends_docker_cacert_path}}"
+            client_cert: "{{promfriends_docker_cert_path}}"
+            client_key: "{{promfriends_docker_key_path}}"
+            tls_hostname: "localhost"
+            validate_certs: true
+            name: "manual-rollback"
+            image: "{{repo}}:{{old}}"
+            command: ["--version"]
+            state: "stopped"
+
+        - name: "run cleanup with stopped unowned container"
+          ansible.builtin.include_tasks: "../tasks/docker_cleanup.yml"
+
+        - name: "inspect stopped unowned container"
+          community.docker.docker_container_info:
+            docker_host: "tcp://localhost:{{dind_port}}"
+            ca_cert: "{{promfriends_docker_cacert_path}}"
+            client_cert: "{{promfriends_docker_cert_path}}"
+            client_key: "{{promfriends_docker_key_path}}"
+            tls_hostname: "localhost"
+            validate_certs: true
+            name: "manual-rollback"
+          register: manual_rollback
+
+        - name: "inventory after stopped-container cleanup"
+          community.docker.docker_host_info:
+            docker_host: "tcp://localhost:{{dind_port}}"
+            ca_cert: "{{promfriends_docker_cacert_path}}"
+            client_cert: "{{promfriends_docker_cert_path}}"
+            client_key: "{{promfriends_docker_key_path}}"
+            tls_hostname: "localhost"
+            validate_certs: true
+            images: true
+          register: after_stopped
+
+        - name: "collect tags after stopped-container cleanup"
+          ansible.builtin.set_fact:
+            stopped_tags: >-
+              {{after_stopped.images
+                | map(attribute='RepoTags') | select() | flatten}}
+
+        - name: "assert unowned container and its image are preserved"
+          ansible.builtin.assert:
+            that:
+              - manual_rollback.exists
+              - "repo ~ ':' ~ old in stopped_tags"
+              - "repo ~ ':' ~ cur in stopped_tags"
+            fail_msg: >-
+              unowned={{manual_rollback.exists}},
+              tags={{stopped_tags}}
+
+      always:
+        - name: "tear down dind"
+          community.docker.docker_container:
+            name: "{{dind_name}}"
+            state: "absent"
+            force_kill: true
+
+        - name: "tear down network"
+          community.docker.docker_network:
+            name: "{{dind_net}}"
+            state: "absent"
+
+        # dind writes the mounted certificate tree as root.
+        - name: "empty certificate volume"
+          community.docker.docker_container:
+            name: "{{dind_name}}-sweep"
+            image: "alpine:latest"
+            command: ["sh", "-c", "rm -rf /certs/* /certs/.[!.]* || true"]
+            volumes:
+              - "{{certs}}:/certs"
+            detach: false
+            auto_remove: true
+          failed_when: false
+
+        - name: "remove certificate directory"
+          ansible.builtin.file:
+            path: "{{certs}}"
+            state: "absent"

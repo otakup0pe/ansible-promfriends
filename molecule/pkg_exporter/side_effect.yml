@@ -1,0 +1,35 @@
+---
+- name: Break the pkg-exporter venv
+  hosts: all
+  become: true
+  gather_facts: true
+  vars_files:
+    - ../../defaults/main.yml
+  tasks:
+    - name: Stop the pkg-exporter timer
+      ansible.builtin.systemd:
+        name: promnode-pkg-exporter.timer
+        state: stopped
+
+    - name: Remove the volatile pkg-exporter metric
+      ansible.builtin.file:
+        path: "{{promnode_text_path}}/pkg-exporter.prom"
+        state: absent
+
+    # Remove the uv symlink before writing, or copy follows it to the interpreter.
+    - name: Remove the venv interpreter symlink
+      ansible.builtin.file:
+        path: "{{promnode_pkg_exporter_install_path}}/bin/python"
+        state: absent
+
+    # Imports still succeed; the impossible 3.0 version isolates version drift.
+    - name: Install an interpreter shim that lies about its version
+      ansible.builtin.copy:
+        dest: "{{promnode_pkg_exporter_install_path}}/bin/python"
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          case "$2" in
+            *sys.version_info*) echo "3.0"; exit 0 ;;
+          esac
+          exec /usr/bin/python3 "$@"

@@ -1,0 +1,34 @@
+---
+# Docker prune filters cannot scope by image repository, so enumerate matches.
+- name: "inventory images and containers on {{promfriends_docker_host}}"
+  become: false
+  delegate_to: "localhost"
+  changed_when: false
+  docker_host_info:
+    docker_host: "tcp://{{promfriends_docker_host}}:{{promfriends_docker_port|default(2376)}}"
+    ca_cert: "{{promfriends_docker_cacert_path}}"
+    client_key: "{{promfriends_docker_key_path}}"
+    client_cert: "{{promfriends_docker_cert_path}}"
+    tls_hostname: "{{promfriends_docker_tls_hostname|default(promfriends_docker_host)}}"
+    validate_certs: true
+    images: true
+    containers: true
+    containers_all: true
+    # Container state is absent from the reduced response.
+    verbose_output: true
+  register: promfriends_docker_state
+
+# Omitting force makes Docker refuse if a selected image is still referenced.
+- name: "remove superseded {{context}} images"
+  become: false
+  delegate_to: "localhost"
+  docker_image:
+    docker_host: "tcp://{{promfriends_docker_host}}:{{promfriends_docker_port|default(2376)}}"
+    ca_cert: "{{promfriends_docker_cacert_path}}"
+    client_key: "{{promfriends_docker_key_path}}"
+    client_cert: "{{promfriends_docker_cert_path}}"
+    tls_hostname: "{{promfriends_docker_tls_hostname|default(promfriends_docker_host)}}"
+    validate_certs: true
+    name: "{{item}}"
+    state: "absent"
+  loop: "{{promfriends_docker_images_to_remove}}"

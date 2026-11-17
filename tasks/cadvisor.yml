@@ -9,28 +9,29 @@
         ca_cert: "{{promfriends_docker_cacert_path}}"
         client_key: "{{promfriends_docker_key_path}}"
         client_cert: "{{promfriends_docker_cert_path}}"
-        tls_hostname: "{{inventory_hostname}}"
+        tls_hostname: "{{promfriends_docker_tls_hostname|default(promfriends_docker_host)}}"
         validate_certs: true
-        docker_host: "tcp://{{inventory_hostname}}:2376"
+        docker_host: "tcp://{{promfriends_docker_host}}:{{promfriends_docker_port|default(2376)}}"
       register: _cadvisor_info
-      no_log: "{{yopo_debug|default('') != 'true'}}"
+      no_log: "{{ ansible_verbosity|int < 4 }}"
+      when: _promfriends_docker_available|default(false)
 
     - name: "remove cadvisor container"
       become: false
       delegate_to: "localhost"
       docker_container:
         name: "cadvisor"
-        docker_host: "tcp://{{promfriends_docker_host}}:2376"
+        docker_host: "tcp://{{promfriends_docker_host}}:{{promfriends_docker_port|default(2376)}}"
         ca_cert: "{{promfriends_docker_cacert_path}}"
         client_key: "{{promfriends_docker_key_path}}"
         client_cert: "{{promfriends_docker_cert_path}}"
-        tls_hostname: "{{promfriends_docker_host}}"
+        tls_hostname: "{{promfriends_docker_tls_hostname|default(promfriends_docker_host)}}"
         validate_certs: true
         state: "absent"
-      when: _cadvisor_info.exists|default(false)
-  when:
-    - '"cadvisor" not in promfriends_contexts|default([])'
-    - _promfriends_docker_available|default(false)
+      when:
+        - _promfriends_docker_available|default(false)
+        - _cadvisor_info.exists|default(false)
+  when: '"cadvisor" not in promfriends_contexts|default([])'
 
 - block:
     - name: "get group id"
@@ -49,8 +50,8 @@
         user: "root"
         use_devices:
           - "/dev/kmsg:/dev/kmsg:ro"
-        publish:
-          - "127.0.0.1:{{cadvisor_port}}:{{cadvisor_port}}"
+        publish: "{{cadvisor_publish}}"
+        use_pid_mode: "{{ cadvisor_pid_mode or omit }}"
         volume:
           - "/:/rootfs:ro"
           - "/run/docker.sock:/run/docker.sock:ro"
@@ -61,16 +62,12 @@
           - "/etc/machine-id:/etc/machine-id:ro"
         container_groups:
           - "{{cadvisor_docker_gid}}"
-        use_command:
-          - "--logtostderr=true"
-          - "--http_auth_realm={{inventory_hostname}}"
-          - "--port={{cadvisor_port}}"
-        use_env:
-          CADVISOR_HEALTHCHECK_URL: "http://localhost:{{cadvisor_port}}/healthz"
+        use_command: "{{cadvisor_command}}"
+        use_healthcheck: "{{cadvisor_healthcheck}}"
 
     - name: "ensure cadvisor container is running"
       uri:
-        url: "http://{{inventory_hostname}}:{{cadvisor_port}}/"
+        url: "http://{{cadvisor_health_host}}:{{cadvisor_port}}/healthz"
       register: cadvisor_status
       until: cadvisor_status.status == 200
       retries: 5

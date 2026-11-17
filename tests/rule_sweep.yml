@@ -1,0 +1,138 @@
+---
+- name: "orphaned rule file sweep"
+  hosts: "localhost"
+  connection: "local"
+  gather_facts: false
+  vars:
+    promfriends_rule_sweep: true
+    promfriends_rule_configs:
+      - template: "power_alerts.yml.j2"
+      - template: "node_alerts.yml.j2"
+        state: "present"
+      - template: "roles/x/templates/nested_alerts.yml.j2"
+      - template: "retired_alerts.yml.j2"
+        state: "absent"
+      - template: "plain_alerts.yml"
+      - template: "weird_alerts.yml.j2"
+        state: "maybe"
+    fixture_files:
+      - "power_alerts_rule.yml"
+      - "node_alerts_rule.yml"
+      - "nested_alerts_rule.yml"
+      - "retired_alerts_rule.yml"
+      - "plain_alerts_rule.yml"
+      - "weird_alerts_rule.yml"
+      - "orphan_alerts_rule.yml"
+    kept_files:
+      - "nested_alerts_rule.yml"
+      - "node_alerts_rule.yml"
+      - "plain_alerts_rule.yml"
+      - "power_alerts_rule.yml"
+      - "weird_alerts_rule.yml"
+
+  tasks:
+    - name: "load role variables"
+      ansible.builtin.include_vars:
+        file: "../vars/main.yml"
+
+    - name: "create rule fixture directory"
+      ansible.builtin.tempfile:
+        state: "directory"
+        prefix: "promfriends-rule-sweep-"
+      register: rule_fixture
+
+    - name: "exercise rule cleanup"
+      block:
+        - name: "seed rendered rule files"
+          ansible.builtin.copy:
+            dest: "{{rule_fixture.path}}/{{item}}"
+            content: "groups: []\n"
+            mode: "0600"
+          loop: "{{fixture_files}}"
+
+        - name: "run production rule cleanup"
+          ansible.builtin.include_tasks: "../tasks/rule_cleanup.yml"
+          vars:
+            promfriends_config_path: "{{rule_fixture.path}}"
+
+        - name: "assert cleanup changed exactly the orphaned files"
+          ansible.builtin.assert:
+            that:
+              - promfriends_sweep_rules.changed | bool
+              - >-
+                promfriends_sweep_rules.results
+                | selectattr('changed') | map(attribute='item') | sort
+                == ['orphan_alerts_rule.yml', 'retired_alerts_rule.yml']
+            fail_msg: "unexpected cleanup result: {{promfriends_sweep_rules}}"
+
+        - name: "inventory files after cleanup"
+          ansible.builtin.find:
+            paths: "{{rule_fixture.path}}"
+            patterns: "*_rule.yml"
+          register: swept_files
+
+        - name: "assert only configured files remain"
+          ansible.builtin.assert:
+            that:
+              - >-
+                swept_files.files | map(attribute='path') | map('basename')
+                | sort == kept_files
+            fail_msg: >-
+              files after cleanup:
+              {{swept_files.files | map(attribute='path') | map('basename') | sort}}
+
+        - name: "rerun production rule cleanup"
+          ansible.builtin.include_tasks: "../tasks/rule_cleanup.yml"
+          vars:
+            promfriends_config_path: "{{rule_fixture.path}}"
+
+        - name: "assert cleanup is idempotent"
+          ansible.builtin.assert:
+            that:
+              - not promfriends_sweep_rules.changed | bool
+            fail_msg: "second cleanup changed files"
+
+        - name: "reseed an orphan"
+          ansible.builtin.copy:
+            dest: "{{rule_fixture.path}}/orphan_alerts_rule.yml"
+            content: "groups: []\n"
+            mode: "0600"
+
+        - name: "run disabled production rule cleanup"
+          ansible.builtin.include_tasks: "../tasks/rule_cleanup.yml"
+          vars:
+            promfriends_config_path: "{{rule_fixture.path}}"
+            promfriends_rule_sweep: false
+
+        - name: "check orphan after disabled cleanup"
+          ansible.builtin.stat:
+            path: "{{rule_fixture.path}}/orphan_alerts_rule.yml"
+          register: disabled_orphan
+
+        - name: "assert disabled cleanup preserves files"
+          ansible.builtin.assert:
+            that:
+              - disabled_orphan.stat.exists
+
+        - name: "run production cleanup with an empty config"
+          ansible.builtin.include_tasks: "../tasks/rule_cleanup.yml"
+          vars:
+            promfriends_config_path: "{{rule_fixture.path}}"
+            promfriends_rule_configs: []
+            promfriends_rule_sweep: true
+
+        - name: "check orphan after empty-config cleanup"
+          ansible.builtin.stat:
+            path: "{{rule_fixture.path}}/orphan_alerts_rule.yml"
+          register: empty_config_orphan
+
+        - name: "assert empty config retires the final rule file"
+          ansible.builtin.assert:
+            that:
+              - not empty_config_orphan.stat.exists
+
+      always:
+        - name: "remove rule fixture directory"
+          ansible.builtin.file:
+            path: "{{rule_fixture.path}}"
+            state: "absent"

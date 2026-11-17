@@ -1,0 +1,132 @@
+---
+- name: "alert delivery contract"
+  hosts: "localhost"
+  connection: "local"
+  gather_facts: false
+  vars:
+    delivery_failure_id: "promfriends_delivery_contract"
+    rule_fixture:
+      - name: "fixture"
+    webhook_fixture:
+      - name: "webhook"
+        webhook_configs:
+          - url: "http://127.0.0.1:9140"
+
+  tasks:
+    - name: "omitted context ownership is rejected"
+      block:
+        - ansible.builtin.include_tasks: "../tasks/validate_contexts.yml"
+
+        - ansible.builtin.fail:
+            msg: "validation accepted omitted context ownership"
+      rescue:
+        - ansible.builtin.assert:
+            that:
+              - ansible_failed_result.msg is search('promfriends_contexts')
+            fail_msg: "unexpected failure: {{ ansible_failed_result }}"
+
+    - name: "explicit empty context ownership is accepted"
+      ansible.builtin.include_tasks: "../tasks/validate_contexts.yml"
+      vars:
+        promfriends_contexts: []
+
+    - name: "rules without the alerts context are rejected"
+      block:
+        - ansible.builtin.include_tasks: "../tasks/validate_delivery.yml"
+          vars:
+            promfriends_rule_configs: "{{ rule_fixture }}"
+            promfriends_contexts: ["core"]
+            alertmanager_email_enabled: false
+            alertmanager_null_receiver: "nothing"
+            alertmanager_receivers: "{{ webhook_fixture }}"
+            alertmanager_routes:
+              - receiver: "webhook"
+
+        - ansible.builtin.fail:
+            msg: "validation accepted rules without the alerts context"
+      rescue:
+        - ansible.builtin.assert:
+            that:
+              - ansible_failed_result.msg is match('^' ~ delivery_failure_id ~ ':')
+            fail_msg: "unexpected failure: {{ ansible_failed_result }}"
+
+    - name: "a null receiver is not a delivery receiver"
+      block:
+        - ansible.builtin.include_tasks: "../tasks/validate_delivery.yml"
+          vars:
+            promfriends_rule_configs: "{{ rule_fixture }}"
+            promfriends_contexts: ["alerts", "core"]
+            alertmanager_email_enabled: false
+            alertmanager_null_receiver: "nothing"
+            alertmanager_receivers: []
+            alertmanager_routes:
+              - receiver: "nothing"
+
+        - ansible.builtin.fail:
+            msg: "validation accepted only the null receiver"
+      rescue:
+        - ansible.builtin.assert:
+            that:
+              - ansible_failed_result.msg is match('^' ~ delivery_failure_id ~ ':')
+            fail_msg: "unexpected failure: {{ ansible_failed_result }}"
+
+    - name: "a matcher-only route is not a delivery fallback"
+      block:
+        - ansible.builtin.include_tasks: "../tasks/validate_delivery.yml"
+          vars:
+            promfriends_rule_configs: "{{ rule_fixture }}"
+            promfriends_contexts: ["alerts", "core"]
+            alertmanager_email_enabled: false
+            alertmanager_null_receiver: "nothing"
+            alertmanager_receivers: "{{ webhook_fixture }}"
+            alertmanager_routes:
+              - receiver: "webhook"
+                matchers: ['severity="critical"']
+
+        - ansible.builtin.fail:
+            msg: "validation accepted only matcher-scoped routes"
+      rescue:
+        - ansible.builtin.assert:
+            that:
+              - ansible_failed_result.msg is match('^' ~ delivery_failure_id ~ ':')
+            fail_msg: "unexpected failure: {{ ansible_failed_result }}"
+
+    - name: "a configured receiver with a fallback route is accepted"
+      ansible.builtin.include_tasks: "../tasks/validate_delivery.yml"
+      vars:
+        promfriends_rule_configs: "{{ rule_fixture }}"
+        promfriends_contexts: ["alerts", "core"]
+        alertmanager_email_enabled: false
+        alertmanager_null_receiver: "nothing"
+        alertmanager_receivers: "{{ webhook_fixture }}"
+        alertmanager_routes:
+          - receiver: "webhook"
+
+    # The contract is gated, so an accepted case and a skipped one both read as
+    # a pass. Prove this one evaluated.
+    - name: "the accepted case evaluated the contract rather than skipping it"
+      ansible.builtin.assert:
+        that:
+          - _promfriends_delivery_receivers | default([]) | length > 0
+          - _promfriends_delivery_routes | default([]) | length > 0
+        fail_msg: "the delivery contract was skipped, not satisfied"
+
+    - name: "the contract does not apply without the core context"
+      ansible.builtin.include_tasks: "../tasks/validate_delivery.yml"
+      vars:
+        promfriends_rule_configs: "{{ rule_fixture }}"
+        promfriends_contexts: ["node"]
+        alertmanager_email_enabled: false
+        alertmanager_null_receiver: "nothing"
+        alertmanager_receivers: []
+        alertmanager_routes: []
+
+    - name: "the contract does not apply when no rules are configured"
+      ansible.builtin.include_tasks: "../tasks/validate_delivery.yml"
+      vars:
+        promfriends_rule_configs: []
+        promfriends_contexts: []
+        alertmanager_email_enabled: false
+        alertmanager_null_receiver: "nothing"
+        alertmanager_receivers: []
+        alertmanager_routes: []

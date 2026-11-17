@@ -1,0 +1,46 @@
+---
+# Rule files are rendered only by the `core` context, so rule configs on a
+# node-only install evaluate nowhere and need no delivery path.
+- name: "validate the alert delivery contract"
+  when:
+    - promfriends_rule_configs | default([]) | length > 0
+    - "'core' in promfriends_contexts | default([])"
+  block:
+    - name: "collect notification receivers"
+      ansible.builtin.set_fact:
+        _promfriends_delivery_receivers: >-
+          {{
+            (
+              alertmanager_receivers | default([])
+              | selectattr('name', 'defined')
+              | map(attribute='name')
+              | list
+              + (['eeeemail'] if alertmanager_email_enabled | default(false) | bool else [])
+            )
+            | difference([alertmanager_null_receiver | default('nothing')])
+          }}
+
+    - name: "reset matcher-less delivery routes"
+      ansible.builtin.set_fact:
+        _promfriends_delivery_routes: []
+
+    - name: "collect matcher-less delivery routes"
+      ansible.builtin.set_fact:
+        _promfriends_delivery_routes: "{{_promfriends_delivery_routes + [item]}}"
+      loop: "{{alertmanager_routes | default([])}}"
+      when:
+        - item.receiver | default('') in _promfriends_delivery_receivers
+        - item.matchers | default([]) | length == 0
+        - item.match | default({}) | length == 0
+        - item.match_re | default({}) | length == 0
+
+    - name: "require an alert delivery fallback when rules are configured"
+      ansible.builtin.assert:
+        that:
+          - "'alerts' in promfriends_contexts | default([])"
+          - _promfriends_delivery_receivers | length > 0
+          - _promfriends_delivery_routes | length > 0
+        fail_msg: >-
+          promfriends_delivery_contract: promfriends_rule_configs requires the
+          alerts context, a configured non-null receiver, and a matcher-less route
+          to that receiver

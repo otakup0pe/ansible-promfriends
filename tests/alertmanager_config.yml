@@ -1,0 +1,245 @@
+---
+- name: Verify the Alertmanager configuration contract
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    template_src: "{{ playbook_dir }}/../templates/alertmanager.yml.j2"
+    email_address: sysop@example.invalid
+    smtp_host: email-smtp.example.invalid
+    smtp_user: AKIAFIXTURE
+    smtp_password: fixture-password
+    inhibit_rules:
+      - source_matchers:
+          - 'alertname="UpstreamDown"'
+        target_matchers:
+          - 'alertname="DependentAlert"'
+        equal:
+          - instance
+    custom_receivers:
+      - name: webhook
+        webhook_configs:
+          - url: http://127.0.0.1:9140
+            send_resolved: true
+      - name: pager
+        webhook_configs:
+          - url: http://127.0.0.1:9141
+    custom_routes:
+      - receiver: pager
+        matchers:
+          - 'severity="critical"'
+
+  tasks:
+    - name: Load role defaults
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../defaults/main.yml"
+        name: role_defaults
+
+    - name: Create render directory
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: amcfg
+      register: scratch
+
+    # The Alertmanager image runs as nobody and must read the bind mount.
+    - name: Make render directory readable by the validator
+      ansible.builtin.file:
+        path: "{{ scratch.path }}"
+        mode: "0755"
+        state: directory
+
+    - name: Exercise rendered configuration contracts
+      block:
+        - name: Define render cases
+          ansible.builtin.set_fact:
+            render_cases:
+              - name: default
+                default_email: "{{ role_defaults.alertmanager_default_email }}"
+                root_receiver: null
+                receivers: "{{ role_defaults.alertmanager_receivers }}"
+                routes: "{{ role_defaults.alertmanager_routes }}"
+                inhibit_rules: "{{ role_defaults.alertmanager_inhibit_rules }}"
+              - name: email
+                default_email: "{{ email_address }}"
+                root_receiver: null
+                receivers: "{{ role_defaults.alertmanager_receivers }}"
+                routes: "{{ role_defaults.alertmanager_routes }}"
+                inhibit_rules: "{{ role_defaults.alertmanager_inhibit_rules }}"
+              - name: routed
+                default_email: ""
+                root_receiver: webhook
+                receivers: "{{ custom_receivers }}"
+                routes: "{{ custom_routes }}"
+                inhibit_rules: "{{ inhibit_rules }}"
+
+        - name: Render Alertmanager configurations
+          ansible.builtin.template:
+            src: "{{ template_src }}"
+            dest: "{{ scratch.path }}/{{ item.name }}.yml"
+            mode: "0644"
+          loop: "{{ render_cases }}"
+          loop_control:
+            label: "{{ item.name }}"
+          vars:
+            alertmanager_default_email: "{{ item.default_email }}"
+            alertmanager_email_enabled: >-
+              {{ role_defaults.alertmanager_email_enabled }}
+            alertmanager_smtp_host: "{{ smtp_host }}"
+            alertmanager_smtp_port: "{{ role_defaults.alertmanager_smtp_port }}"
+            alertmanager_smtp_user: "{{ smtp_user }}"
+            alertmanager_smtp_password: "{{ smtp_password }}"
+            alertmanager_smtp_from: "{{ email_address }}"
+            alertmanager_null_receiver: >-
+              {{ role_defaults.alertmanager_null_receiver }}
+            alertmanager_root_receiver: >-
+              {{
+                item.root_receiver
+                | default(role_defaults.alertmanager_root_receiver, true)
+              }}
+            alertmanager_receivers: "{{ item.receivers }}"
+            alertmanager_routes: "{{ item.routes }}"
+            alertmanager_inhibit_rules: "{{ item.inhibit_rules }}"
+            alertmanager_repeat_interval: >-
+              {{ role_defaults.alertmanager_repeat_interval }}
+            alertmanager_group_by: "{{ role_defaults.alertmanager_group_by }}"
+
+        - name: Read rendered configurations
+          ansible.builtin.slurp:
+            src: "{{ scratch.path }}/{{ item.name }}.yml"
+          loop: "{{ render_cases }}"
+          loop_control:
+            label: "{{ item.name }}"
+          register: rendered_files
+
+        - name: Parse rendered configurations
+          ansible.builtin.set_fact:
+            parsed: >-
+              {{
+                dict(
+                  rendered_files.results | map(attribute='item.name') | zip(
+                    rendered_files.results | map(attribute='content')
+                    | map('b64decode') | map('from_yaml')
+                  )
+                )
+              }}
+
+        - name: Verify the shipped no-email sink
+          vars:
+            sinks: >-
+              {{
+                parsed.default.receivers
+                | selectattr(
+                    'name',
+                    'equalto',
+                    parsed.default.route.receiver
+                  )
+                | list
+              }}
+            delivery_keys: >-
+              {{
+                sinks[0].keys()
+                | select('match', '.*_configs$')
+                | list
+              }}
+          ansible.builtin.assert:
+            that:
+              - "'global' not in parsed.default"
+              - sinks | length == 1
+              - delivery_keys == []
+            fail_msg: The default root receiver must have no delivery config.
+
+        - name: Verify email opt-in
+          vars:
+            receivers: >-
+              {{
+                parsed.email.receivers
+                | selectattr(
+                    'name',
+                    'equalto',
+                    parsed.email.route.receiver
+                  )
+                | list
+              }}
+            receiver: "{{ receivers[0] }}"
+          ansible.builtin.assert:
+            that:
+              - receivers | length == 1
+              - parsed.email.global.smtp_smarthost == smtp_host ~ ":" ~ role_defaults.alertmanager_smtp_port
+              - parsed.email.global.smtp_from == email_address
+              - parsed.email.global.smtp_auth_username == smtp_user
+              - parsed.email.global.smtp_auth_password == smtp_password
+              - receiver.email_configs[0].to == email_address
+              - receiver.email_configs[0].send_resolved
+            fail_msg: Opting into email must render the complete SMTP receiver.
+
+        - name: Verify route, receiver, and inhibition contracts
+          vars:
+            receiver_names: >-
+              {{ parsed.routed.receivers | map(attribute='name') | list }}
+            route_receivers: >-
+              {{ parsed.routed.route.routes | map(attribute='receiver') | list }}
+            expected_route_receivers: >-
+              {{ custom_routes | map(attribute='receiver') | list }}
+          ansible.builtin.assert:
+            that:
+              - parsed.routed.route.receiver in receiver_names
+              - route_receivers == expected_route_receivers
+              - route_receivers | difference(receiver_names) == []
+              - parsed.routed.inhibit_rules == inhibit_rules
+            fail_msg: Routes and inhibit rules must pass through with valid receivers.
+
+        - name: Check for amtool on PATH
+          ansible.builtin.command: amtool --version
+          register: amtool_probe
+          changed_when: false
+          failed_when: false
+
+        - name: Check the pinned Alertmanager image for amtool
+          ansible.builtin.command: >-
+            docker run --rm --entrypoint /bin/amtool
+            prom/alertmanager:v{{ role_defaults.alertmanager_version }}
+            --version
+          register: docker_probe
+          changed_when: false
+          failed_when: false
+          when: amtool_probe.rc != 0
+
+        - name: Require an Alertmanager schema validator
+          ansible.builtin.assert:
+            that:
+              - >-
+                amtool_probe.rc == 0
+                or (docker_probe.rc | default(1)) == 0
+            fail_msg: >-
+              Alertmanager schema validation requires amtool on PATH or a
+              usable prom/alertmanager:v{{ role_defaults.alertmanager_version }}
+              Docker image.
+
+        - name: Select the Alertmanager schema validator
+          ansible.builtin.set_fact:
+            amtool_command: >-
+              {{
+                'amtool'
+                if amtool_probe.rc == 0
+                else
+                'docker run --rm -v ' ~ scratch.path ~ ':/cfg:ro'
+                ~ ' --entrypoint /bin/amtool'
+                ~ ' prom/alertmanager:v' ~ role_defaults.alertmanager_version
+              }}
+            amtool_directory: >-
+              {{ scratch.path if amtool_probe.rc == 0 else '/cfg' }}
+
+        - name: Validate every render against the Alertmanager schema
+          ansible.builtin.command: >-
+            {{ amtool_command }} check-config
+            {{ amtool_directory }}/{{ item.name }}.yml
+          loop: "{{ render_cases }}"
+          loop_control:
+            label: "{{ item.name }}"
+          changed_when: false
+
+      always:
+        - name: Remove render directory
+          ansible.builtin.file:
+            path: "{{ scratch.path }}"
+            state: absent

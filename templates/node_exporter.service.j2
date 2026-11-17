@@ -2,13 +2,13 @@
 
 [Unit]
 Description=PromNode
-After=network-online.target
+# tmpfiles owns the shared textfile directory and its group-writable mode.
+After=network-online.target systemd-tmpfiles-setup.service
 
 [Service]
 Type=simple
 User=root
 Group={{promnode_group}}
-ExecStartPre=mkdir -p {{promnode_text_path}}
 ExecStart={{promnode_bin}} \
 {% for collector in promnode_disabled %}
 {{'    '}}--no-collector.{{collector}} \

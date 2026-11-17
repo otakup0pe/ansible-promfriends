@@ -1,0 +1,8 @@
+---
+# promfriends meta depends on ANXS.python. This scenario sets
+# promnode_pkg_exporter=true, so the dependency's tasks DO run here -- that
+# is what installs uv, which the pkg-exporter venv is built with.
+roles:
+  - name: ANXS.python
+    src: https://github.com/ANXS/python
+    version: master

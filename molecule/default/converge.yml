@@ -11,3 +11,38 @@
     promnode_pkg_exporter: false
   roles:
     - role: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | basename }}"
+
+  post_tasks:
+    - name: Inspect stale blackbox config
+      ansible.builtin.stat:
+        path: /opt/prometheus/etc/blackbox.yml
+      register: stale_blackbox_config
+
+    - name: Require node-only cleanup to stay local
+      ansible.builtin.assert:
+        that:
+          - not _promfriends_docker_available | bool
+          - not stale_blackbox_config.stat.exists
+        fail_msg: >-
+          node-only cleanup used an unavailable remote Docker endpoint
+          or left stale local config
+
+    - name: Inspect retired textfile exporter artifacts
+      ansible.builtin.stat:
+        path: "{{item}}"
+      loop:
+        - "{{promnode_pkg_exporter_install_path}}"
+        - "{{promnode_kernel_metrics_install_path}}/promnode-kernel-metrics.sh"
+        - "{{promnode_text_path}}/pkg-exporter.prom"
+        - "{{promnode_text_path}}/kernel-metrics.prom"
+        - "/etc/systemd/system/promnode-pkg-exporter.timer"
+        - "/etc/systemd/system/promnode-pkg-exporter.service"
+        - "/etc/systemd/system/promnode-kernel-metrics.timer"
+        - "/etc/systemd/system/promnode-kernel-metrics.service"
+      register: retired_textfile_exporter_artifacts
+
+    - name: Require disabled textfile exporters to be retired
+      ansible.builtin.assert:
+        that:
+          - retired_textfile_exporter_artifacts.results | map(attribute="stat.exists") | select | list | length == 0
+        fail_msg: "disabled textfile exporter artifacts remain"

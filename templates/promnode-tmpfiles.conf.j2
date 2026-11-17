@@ -1,0 +1,4 @@
+# {{ansible_managed}}
+# Setgid lets producer services replace one another's files atomically.
+d {{promnode_run_path}} 0755 root root -
+d {{promnode_run_text_path}} {{promnode_text_mode}} root {{promnode_group}} -

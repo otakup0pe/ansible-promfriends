@@ -1,0 +1,22 @@
+---
+# Keep discovery unconditional so the registered result exists when Ansible
+# templates the removal loop before evaluating its conditions.
+- name: "find rendered rule files"
+  find:
+    paths: "{{promfriends_config_path}}"
+    patterns: "*_rule.yml"
+  register: _promfriends_rendered_rules
+  changed_when: false
+  check_mode: false
+
+- name: "remove orphaned rule files"
+  file:
+    path: "{{promfriends_config_path}}/{{item}}"
+    state: "absent"
+  loop: >-
+    {{ _promfriends_rendered_rules.files
+       | map(attribute='path') | map('basename') | list
+       | difference(promfriends_rule_files_wanted) }}
+  register: promfriends_sweep_rules
+  when:
+    - promfriends_rule_sweep|bool
