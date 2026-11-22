@@ -1,10 +1,5 @@
 ---
-# promfriends meta depends on ANXS.python. Ansible loads the dependency
-# role even when its `when:` (promnode_pkg_exporter) is false, so it must
-# be resolvable on the roles path for any converge. The node-only default
-# scenario sets promnode_pkg_exporter=false, so ANXS.python's tasks do not
-# run -- upstream is sufficient here. The pkg_exporter scenario (which does
-# run uv) will pin the locally-modernized copy.
+# Meta dependencies must resolve even when their tasks are skipped.
 roles:
   - name: ANXS.python
     src: https://github.com/ANXS/python

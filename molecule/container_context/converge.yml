@@ -1,0 +1,122 @@
+---
+- name: Remove an absent container context from a node-only host
+  hosts: all
+  become: true
+  gather_facts: true
+  tags:
+    - molecule-idempotence-notest
+  vars:
+    promfriends_contexts:
+      - node
+    promnode_pkg_exporter: false
+    promfriends_docker_host: "127.0.0.1"
+    promfriends_docker_cacert_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/docker-certs/ca.pem
+    promfriends_docker_key_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/docker-certs/key.pem
+    promfriends_docker_cert_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/docker-certs/cert.pem
+  pre_tasks:
+    - name: Seed stale blackbox config
+      ansible.builtin.copy:
+        content: "stale\n"
+        dest: "/opt/prometheus/etc/blackbox.yml"
+        mode: "0600"
+
+    - name: Seed stale blackbox container
+      become: false
+      delegate_to: localhost
+      community.docker.docker_container:
+        name: "prom_blackbox"
+        image: "{{ prombb_image }}"
+        command: "--version"
+        state: present
+        docker_host: "tcp://{{ promfriends_docker_host }}:2376"
+        ca_cert: "{{ promfriends_docker_cacert_path }}"
+        client_key: "{{ promfriends_docker_key_path }}"
+        client_cert: "{{ promfriends_docker_cert_path }}"
+        tls_hostname: "{{ promfriends_docker_host }}"
+        validate_certs: true
+
+  roles:
+    - role: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | basename }}"
+
+  post_tasks:
+    - name: Inspect stale blackbox container
+      become: false
+      delegate_to: localhost
+      community.docker.docker_container_info:
+        name: "prom_blackbox"
+        docker_host: "tcp://{{ promfriends_docker_host }}:2376"
+        ca_cert: "{{ promfriends_docker_cacert_path }}"
+        client_key: "{{ promfriends_docker_key_path }}"
+        client_cert: "{{ promfriends_docker_cert_path }}"
+        tls_hostname: "{{ promfriends_docker_host }}"
+        validate_certs: true
+      register: stale_blackbox_container
+
+    - name: Inspect stale blackbox config
+      ansible.builtin.stat:
+        path: "/opt/prometheus/etc/blackbox.yml"
+      register: stale_blackbox_config
+
+    - name: Require absent-context teardown
+      ansible.builtin.assert:
+        that:
+          - _promfriends_docker_available | bool
+          - not stale_blackbox_container.exists
+          - not stale_blackbox_config.stat.exists
+        fail_msg: "node-only converge left stale blackbox state behind"
+
+- name: Converge selected container contexts
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    promfriends_contexts:
+      - blackbox
+      - cadvisor
+    promnode_pkg_exporter: true
+    promfriends_docker_host: "127.0.0.1"
+    promfriends_docker_cacert_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/docker-certs/ca.pem
+    promfriends_docker_key_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/docker-certs/key.pem
+    promfriends_docker_cert_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/docker-certs/cert.pem
+  pre_tasks:
+    - name: Require this scenario to exercise a container context
+      ansible.builtin.assert:
+        that:
+          - promfriends_contexts | difference(['node']) | length > 0
+        fail_msg: >-
+          container_context must select at least one non-node promfriends context
+
+  roles:
+    - role: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | basename }}"
+
+  post_tasks:
+    - name: Inspect retired node exporter artifacts
+      ansible.builtin.stat:
+        path: "{{item}}"
+      loop:
+        - "{{promnode_bin}}"
+        - "/opt/prometheus/etc/node_exporter-web_config.yml"
+        - "{{promnode_tmpfiles_conf}}"
+        - "{{promnode_run_path}}"
+        - "/etc/systemd/system/node_exporter.service"
+        - "{{promnode_pkg_exporter_install_path}}"
+        - "{{promnode_kernel_metrics_install_path}}/promnode-kernel-metrics.sh"
+        - "{{promnode_text_path}}/pkg-exporter.prom"
+        - "{{promnode_text_path}}/kernel-metrics.prom"
+        - "/etc/systemd/system/promnode-pkg-exporter.timer"
+        - "/etc/systemd/system/promnode-pkg-exporter.service"
+        - "/etc/systemd/system/promnode-kernel-metrics.timer"
+        - "/etc/systemd/system/promnode-kernel-metrics.service"
+      register: retired_node_exporter_artifacts
+
+    - name: Require absent node context to retire node exporters
+      ansible.builtin.assert:
+        that:
+          - retired_node_exporter_artifacts.results | map(attribute="stat.exists") | select | list | length == 0
+        fail_msg: "absent node context left node exporter artifacts"

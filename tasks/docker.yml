@@ -16,6 +16,7 @@
       published_ports: "strict"
       volumes: "allow_more_present"
       env: "allow_more_present"
+      healthcheck: "strict"
       dns_servers: "strict"
     recreate: "{{changed|default(false)}}"
     published_ports: "{{publish|default(omit)}}"
@@ -23,11 +24,14 @@
     privileged: "{{privileged|default(False)}}"
     pull: true
     devices: "{{use_devices|default(omit)}}"
+    # pid_mode changes require callers to set `changed`; comparisons is key-scoped.
+    pid_mode: "{{use_pid_mode|default(omit)}}"
     image: "{{image}}"
     command: "{{use_command|default(omit)}}"
     volumes: "{{volume|default(omit)}}"
     capabilities: "{{caps|default(omit)}}"
     env: "{{use_env|default(omit)}}"
+    healthcheck: "{{use_healthcheck|default(omit)}}"
     dns_servers: "{{promfriends_dns_servers|default(omit)}}"
     etc_hosts: "{{promfriends_extra_hosts|default({}) or omit}}"
     labels: "{{labels|default(omit)}}"
@@ -36,3 +40,5 @@
     groups: "{{[prometheus_container_gid] + container_groups|default([])}}"
     log_driver: "{{promfriends_logdriver}}"
     log_options: "{{promfriends_logoptions}}"
+
+- include_tasks: "docker_cleanup.yml"

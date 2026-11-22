@@ -2,7 +2,9 @@
 dependencies:
   - role: "ANXS.python"
     python_uv_install: true
-    when: promnode_pkg_exporter | default(true)
+    when:
+      - promnode_pkg_exporter | default(true) | bool
+      - '"node" in promfriends_contexts | default([])'
 galaxy_info:
   namespace: otakup0pe
   role_name: promfriends

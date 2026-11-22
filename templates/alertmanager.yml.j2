@@ -1,22 +1,30 @@
 ---  # -*-YAML-*- {{ansible_managed}}
+{# Blank SMTP values load but silently fail delivery, so email is all-or-nothing. #}
+{% if alertmanager_email_enabled | bool %}
 global:
   smtp_smarthost: "{{alertmanager_smtp_host}}:{{alertmanager_smtp_port}}"
   smtp_from: "{{alertmanager_smtp_from}}"
   smtp_auth_username: "{{alertmanager_smtp_user}}"
   smtp_auth_password: "{{alertmanager_smtp_password}}"
 
+{% endif %}
 receivers:
+{% if alertmanager_email_enabled | bool %}
 {{'  '}}- name: "eeeemail"
 {{'    '}}email_configs:
 {{'      '}}- send_resolved: true
 {{'        '}}to: "{{alertmanager_default_email}}"
+{% else %}
+{# A name-only receiver is a valid sink for the required root route. #}
+{{'  '}}- name: "{{alertmanager_null_receiver}}"
+{% endif %}
 {% for receiver in alertmanager_receivers -%}
 {{'  '}}- {{receiver | to_nice_yaml(indent=4, sort_keys=False) | indent(4, False)}}
 {% endfor %}
 
 route:
   repeat_interval: "{{alertmanager_repeat_interval}}"
-  receiver: "eeeemail"
+  receiver: "{{alertmanager_root_receiver}}"
   group_by:
 {% for group in alertmanager_group_by -%}
 {{'    '}}- "{{group}}"
@@ -25,5 +33,13 @@ route:
 {{'  '}}routes:
 {% for route in alertmanager_routes -%}
 {{'    '}}- {{route | to_nice_yaml(indent=6, sort_keys=False) | indent(6, False)}}
+{% endfor %}
+{% endif %}
+{# Preserve the newline before this top-level key and omit it when empty. #}
+{% if alertmanager_inhibit_rules|length > 0 %}
+
+inhibit_rules:
+{% for rule in alertmanager_inhibit_rules -%}
+{{'  '}}- {{rule | to_nice_yaml(indent=4, sort_keys=False) | indent(4, False)}}
 {% endfor %}
 {% endif %}

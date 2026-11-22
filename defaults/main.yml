@@ -13,8 +13,11 @@ promfriends_cache_path: >-
   {{lookup('env', 'HOME') + '/.cache/ansible-promfriends'}}
 promfriends_sites: {}
 promfriends_certs_changed: false
-promfriends_logdriver: "json"  # or journald or whatever
+promfriends_logdriver: "json-file"  # or journald
+promfriends_logoptions: {}
 promfriends_rule_configs: []
+# Stale rule files remain active; disable only with another directory owner.
+promfriends_rule_sweep: true
 promfriends_extra_hosts: {}
 
 # Configuration for Prometheus itself
@@ -28,6 +31,8 @@ prometheus_scrape_timeout: "5s"
 prometheus_retention_time: "336h"
 prometheus_file_shrink_ratio: "0.1"
 prometheus_log_level: "info"
+# Preserve restored alert dwell for rules whose `for` is at least this long.
+prometheus_for_grace_period: "10m"
 prometheus_port: "9090"
 prometheus_address: "0.0.0.0"
 prometheus_scrapes:
@@ -60,7 +65,7 @@ promsnmp_walk:
   - "1.3.6.1.4.1.2021.4"
 promsnmp_oids: []
 
-prombb_config: "blackbox.yml.j2"
+prombb_config: "blackbox.yml"
 prombb_port: "9115"
 prombb_version: "0.28.0"
 prombb_log: "warn"
@@ -74,6 +79,14 @@ promnode_group: "prometheus"
 promnode_binary_path: "/usr/local/bin"
 promnode_cache_path: "{{promfriends_cache_path}}"
 promnode_text_path: "/var/run/promnode/textfiles"
+promnode_text_mode: "2775"
+
+# tmpfiles requires canonical /run paths; producers join promnode_group.
+promnode_run_text_path: "{{ promnode_text_path | regex_replace('^/var/run/', '/run/') }}"
+promnode_run_path: "{{ promnode_run_text_path | dirname }}"
+# This role is the sole owner of the textfile directory mode.
+promnode_tmpfiles_conf: "/etc/tmpfiles.d/promnode.conf"
+
 promnode_disabled:
   - "arp"
   - "bcache"
@@ -106,15 +119,34 @@ promnode_pkg_exporter: true
 promnode_pkg_exporter_install_path: "/opt/promnode-pkg-exporter"
 promnode_pkg_exporter_scheduler: "systemd"  # or `cron` (for legacy systems)
 promnode_pkg_exporter_oncalendar: "*:0/15"
+# Pin the schedule timezone so DST fall-back cannot skip an interval.
+promnode_pkg_exporter_timezone: "UTC"
+promnode_pkg_exporter_onactivesec: "1min"
+promnode_pkg_exporter_accuracysec: "1min"
 promnode_pkg_exporter_cron_minute: "0,15,30,45"
 promnode_pkg_exporter_cron_hour: "*"
 promnode_pkg_exporter_cron_day: "*"
 promnode_pkg_exporter_cron_month: "*"
 promnode_pkg_exporter_cron_weekday: "*"
 
+# Report running-vs-newest kernel separately from reboot-required state.
+promnode_kernel_metrics_install_path: "/usr/local/bin"
+promnode_kernel_metrics_boot_dir: "/boot"
+promnode_kernel_metrics_onbootsec: "30s"
+promnode_kernel_metrics_oncalendar: "*:0/15"
+promnode_kernel_metrics_accuracysec: "1min"
+
+alertmanager_default_email: ""
+alertmanager_email_enabled: "{{ alertmanager_default_email | default('', true) | length > 0 }}"
 alertmanager_smtp_port: "465"
+
+# Alertmanager requires a root receiver even without a delivery transport.
+alertmanager_null_receiver: "nothing"
+alertmanager_root_receiver: "{{ 'eeeemail' if alertmanager_email_enabled | bool else alertmanager_null_receiver }}"
 alertmanager_receivers: []
 alertmanager_routes: []
+# Omit empty inhibit_rules; Alertmanager rejects null.
+alertmanager_inhibit_rules: []
 alertmanager_repeat_interval: "24h"
 alertmanager_group_by:
   - "alertname"
@@ -147,9 +179,36 @@ alertmanager_cluster_tls_ca: "/ca.crt"
 alertmanager_cluster_tls_server_name: ""
 alertmanager_cluster_tls_volumes: []
 
-cadvisor_version: "0.47.1"
+# Upstream skips v0.58.x and v0.59.x.
+cadvisor_version: "0.60.6"
 cadvisor_port: "9980"
 cadvisor_docker_group: "docker"
+
+# cAdvisor is unauthenticated; keep it loopback-bound behind mTLS.
+cadvisor_address: "127.0.0.1"
+cadvisor_publish:
+  - "{{cadvisor_address}}:{{cadvisor_port}}:{{cadvisor_port}}"
+# Wildcard bind addresses are not valid readiness destinations.
+cadvisor_health_host: >-
+  {{ '127.0.0.1' if cadvisor_address in ['0.0.0.0', '::', ''] else cadvisor_address }}
+
+cadvisor_docker_only: true
+# Prevent arbitrary container labels from multiplying every metric series.
+cadvisor_store_container_labels: false
+cadvisor_housekeeping_interval: "10s"
+cadvisor_max_housekeeping_interval: "60s"
+# Both metric flags replace their defaults; `process` also requires host PID mode.
+cadvisor_disable_metrics:
+  - "advtcp"
+  - "cpu_topology"
+  - "cpuset"
+  - "hugetlb"
+  - "memory_numa"
+  - "percpu"
+  - "referenced_memory"
+  - "resctrl"
+  - "tcp"
+  - "udp"
 
 pushgateway_version: "1.11.2"
 pushgateway_address: "{{prometheus_address}}"

@@ -3,8 +3,10 @@
 Description=run promfriend node pkg-exporter on schedule
 
 [Timer]
-OnCalendar={{ promnode_pkg_exporter_oncalendar }}
-AccuracySec=1m
+OnActiveSec={{ promnode_pkg_exporter_onactivesec }}
+OnCalendar={{ promnode_pkg_exporter_oncalendar }}{{ ' ' ~ promnode_pkg_exporter_timezone if promnode_pkg_exporter_timezone | default('', true) else '' }}
+AccuracySec={{ promnode_pkg_exporter_accuracysec }}
+Persistent=true
 Unit=promnode-pkg-exporter.service
 
 [Install]

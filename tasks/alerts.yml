@@ -9,33 +9,34 @@
         ca_cert: "{{promfriends_docker_cacert_path}}"
         client_key: "{{promfriends_docker_key_path}}"
         client_cert: "{{promfriends_docker_cert_path}}"
-        tls_hostname: "{{inventory_hostname}}"
+        tls_hostname: "{{promfriends_docker_tls_hostname|default(promfriends_docker_host)}}"
         validate_certs: true
-        docker_host: "tcp://{{inventory_hostname}}:2376"
+        docker_host: "tcp://{{promfriends_docker_host}}:{{promfriends_docker_port|default(2376)}}"
       register: _alertmanager_info
-      no_log: "{{yopo_debug|default('') != 'true'}}"
+      no_log: "{{ ansible_verbosity|int < 4 }}"
+      when: _promfriends_docker_available|default(false)
 
     - name: "remove alertmanager container"
       become: false
       delegate_to: "localhost"
       docker_container:
         name: "alertmanager"
-        docker_host: "tcp://{{promfriends_docker_host}}:2376"
+        docker_host: "tcp://{{promfriends_docker_host}}:{{promfriends_docker_port|default(2376)}}"
         ca_cert: "{{promfriends_docker_cacert_path}}"
         client_key: "{{promfriends_docker_key_path}}"
         client_cert: "{{promfriends_docker_cert_path}}"
-        tls_hostname: "{{promfriends_docker_host}}"
+        tls_hostname: "{{promfriends_docker_tls_hostname|default(promfriends_docker_host)}}"
         validate_certs: true
         state: "absent"
-      when: _alertmanager_info.exists|default(false)
+      when:
+        - _promfriends_docker_available|default(false)
+        - _alertmanager_info.exists|default(false)
 
     - name: "remove alertmanager config"
       file:
         path: "{{promfriends_config_path}}/alertmanager.yml"
         state: "absent"
-  when:
-    - '"alerts" not in promfriends_contexts|default([])'
-    - _promfriends_docker_available|default(false)
+  when: '"alerts" not in promfriends_contexts|default([])'
 
 - block:
     - name: "create alert data dir with proper perms"
@@ -46,6 +47,7 @@
         mode: "0770"
         state: "directory"
 
+    # Rendered receivers may contain credentials.
     - name: "generate alertmanager configuration"
       template:
         src: "alertmanager.yml.j2"
@@ -54,6 +56,7 @@
         group: "{{prometheus_container_group}}"
         mode: "0640"
       register: alertmanager_config
+      no_log: "{{ ansible_verbosity|int < 4 }}"
 
     - name: "generate alertmanager cluster tls config"
       template:
@@ -69,8 +72,8 @@
 
     - name: "assemble optional alertmanager cluster args + tls volumes"
       set_fact:
-        _alertmanager_cluster_args: "{% if alertmanager_cluster_peers | length > 0 %}--cluster.listen-address={{alertmanager_cluster_listen_address}} --cluster.advertise-address={{alertmanager_cluster_advertise_address}}{% if alertmanager_cluster_tls_enabled | bool %} --cluster.tls-config=/cluster_tls.yml{% endif %}{% for peer in alertmanager_cluster_peers %} --cluster.peer={{peer}}{% endfor %}{% endif %}"
-        _alertmanager_extra_volumes: "{{ ([promfriends_config_path ~ '/cluster_tls.yml:/cluster_tls.yml:ro'] + alertmanager_cluster_tls_volumes) if (alertmanager_cluster_peers | length > 0 and alertmanager_cluster_tls_enabled | bool) else [] }}"
+        _alertmanager_cluster_args: "{% if alertmanager_cluster_peers | length > 0 %}--cluster.listen-address={{alertmanager_cluster_listen_address}} --cluster.advertise-address={{alertmanager_cluster_advertise_address}}{% if alertmanager_cluster_tls_enabled | bool %} --cluster.tls-config=/cluster_tls.yml{% endif %}{% for peer in alertmanager_cluster_peers %} --cluster.peer={{peer}}{% endfor %}{% endif %}"  # yamllint disable-line rule:line-length
+        _alertmanager_extra_volumes: "{{ ([promfriends_config_path ~ '/cluster_tls.yml:/cluster_tls.yml:ro'] + alertmanager_cluster_tls_volumes) if (alertmanager_cluster_peers | length > 0 and alertmanager_cluster_tls_enabled | bool) else [] }}"  # yamllint disable-line rule:line-length
 
     - include_tasks: "docker.yml"
       vars:

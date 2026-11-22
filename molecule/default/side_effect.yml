@@ -1,0 +1,176 @@
+---
+# Exercise both boot creation and converge repair through producer write access.
+- name: "Repair node exporter runtime-directory drift"
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    promfriends_contexts:
+      - node
+    promnode_pkg_exporter: false
+    promnode_probe_user: "promnode-boot-probe"
+  tasks:
+    - name: "load role defaults"
+      ansible.builtin.include_vars:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/defaults/main.yml"
+
+    - name: "introduce runtime-directory drift"
+      ansible.builtin.file:
+        path: "{{promnode_run_text_path}}"
+        state: "directory"
+        owner: "root"
+        group: "root"
+        mode: "0700"
+
+    - name: "reconcile node exporter context"
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | basename }}"
+
+    - name: "inspect repaired runtime directory"
+      ansible.builtin.stat:
+        path: "{{promnode_run_text_path}}"
+      register: promnode_runtime_dir
+
+    # setgid preserves the producer group across atomic replacements.
+    - name: "assert runtime-directory ownership was repaired"
+      ansible.builtin.assert:
+        that:
+          - promnode_runtime_dir.stat.gr_name == promnode_group
+          - promnode_runtime_dir.stat.wgrp
+          - promnode_runtime_dir.stat.isgid
+        fail_msg: >-
+          converge left the textfile directory unusable by promnode_group
+          producers: gr_name={{promnode_runtime_dir.stat.gr_name}}
+          mode={{promnode_runtime_dir.stat.mode}}
+
+    - name: "create a throwaway non-root textfile producer"
+      ansible.builtin.user:
+        name: "{{promnode_probe_user}}"
+        groups: "{{promnode_group}}"
+        append: true
+        system: true
+        create_home: false
+        shell: "/usr/sbin/nologin"
+
+    - name: "discard the runtime directory as a reboot would"
+      ansible.builtin.file:
+        path: "{{promnode_run_path}}"
+        state: "absent"
+
+    - name: "apply the boot-time declaration"
+      ansible.builtin.command:
+        argv:
+          - "systemd-tmpfiles"
+          - "--create"
+          - "{{promnode_tmpfiles_conf}}"
+      changed_when: true
+
+    - name: "start node exporter against the declared directory"
+      ansible.builtin.systemd:
+        name: "node_exporter"
+        state: "restarted"
+
+    - name: "write a textfile as a non-root producer after boot"
+      ansible.builtin.command:
+        argv:
+          - "su"
+          - "-s"
+          - "/bin/sh"
+          - "-c"
+          - "echo promnode_boot_probe 1 > {{promnode_run_text_path}}/boot-probe.prom"
+          - "{{promnode_probe_user}}"
+      register: promnode_boot_probe
+      changed_when: true
+      failed_when: false
+
+    - name: "assert the declared directory is usable after a boot"
+      ansible.builtin.assert:
+        that:
+          - promnode_boot_probe.rc == 0
+        fail_msg: >-
+          after the boot-time declaration a promnode_group member could not
+          create a textfile: {{promnode_boot_probe.stderr}}
+
+    # A service-side mkdir would recreate the directory with the wrong umask.
+    - name: "discard the runtime directory with the declaration unapplied"
+      ansible.builtin.file:
+        path: "{{promnode_run_path}}"
+        state: "absent"
+
+    - name: "start node exporter with no boot-time declaration applied"
+      ansible.builtin.systemd:
+        name: "node_exporter"
+        state: "restarted"
+
+    - name: "inspect whatever the unit created"
+      ansible.builtin.stat:
+        path: "{{promnode_run_text_path}}"
+      register: promnode_unit_created_dir
+
+    - name: "write a textfile as a non-root producer into a unit-created directory"
+      ansible.builtin.command:
+        argv:
+          - "su"
+          - "-s"
+          - "/bin/sh"
+          - "-c"
+          - "echo promnode_unit_probe 1 > {{promnode_run_text_path}}/unit-probe.prom"
+          - "{{promnode_probe_user}}"
+      register: promnode_unit_probe
+      changed_when: true
+      failed_when: false
+      when: promnode_unit_created_dir.stat.exists
+
+    - name: "assert the unit is not a second creator of the textfile directory"
+      ansible.builtin.assert:
+        that:
+          - not promnode_unit_created_dir.stat.exists or promnode_unit_probe.rc == 0
+        fail_msg: >-
+          node_exporter created the textfile directory itself with a mode it
+          does not declare
+          (mode={{promnode_unit_created_dir.stat.mode | default('n/a')}}),
+          leaving it unwritable by promnode_group producers
+
+    # The service must remain ordered after tmpfiles setup.
+    - name: "read the node exporter ordering systemd actually applied"
+      ansible.builtin.command:
+        argv:
+          - "systemctl"
+          - "show"
+          - "--property=After"
+          - "--value"
+          - "node_exporter.service"
+      register: promnode_unit_after
+      changed_when: false
+
+    - name: "read the tmpfiles-setup ordering systemd actually applied"
+      ansible.builtin.command:
+        argv:
+          - "systemctl"
+          - "show"
+          - "--property=Before"
+          - "--value"
+          - "systemd-tmpfiles-setup.service"
+      register: promnode_tmpfiles_before
+      changed_when: false
+
+    - name: "assert the boot-time declaration is ordered before node exporter"
+      ansible.builtin.assert:
+        that:
+          - "'sysinit.target' in promnode_unit_after.stdout.split()"
+          - "'sysinit.target' in promnode_tmpfiles_before.stdout.split()"
+        fail_msg: >-
+          node_exporter is not ordered after the tmpfiles pass, so the
+          textfile directory may not exist when it starts
+          (node_exporter After={{promnode_unit_after.stdout}};
+          tmpfiles-setup Before={{promnode_tmpfiles_before.stdout}})
+
+    - name: "restore the declared runtime directory for verify"
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | basename }}"
+
+    - name: "remove the throwaway producer"
+      ansible.builtin.user:
+        name: "{{promnode_probe_user}}"
+        state: "absent"
+        remove: false

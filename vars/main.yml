@@ -4,6 +4,31 @@ promfriends_directories:
   - "{{promfriends_config_path}}"
   - "{{promnode_cache_path}}"
 
+# Rendering and sweeping share this map so their filenames cannot drift.
+promfriends_rule_file_names: >-
+  {{ dict(promfriends_rule_configs | map(attribute='template') | list
+          | zip(promfriends_rule_configs | map(attribute='template')
+                | map('basename')
+                | map('splitext') | map('first')
+                | map('splitext') | map('first')
+                | product(['_rule.yml']) | map('join') | list)) }}
+
+# Unknown states stay wanted; an unrecognised state cannot authorize deletion.
+promfriends_rule_files_wanted: >-
+  {{ (promfriends_rule_configs | selectattr('state', 'undefined') | list
+      + promfriends_rule_configs | selectattr('state', 'defined')
+        | rejectattr('state', 'eq', 'absent') | list)
+     | map(attribute='template')
+     | map('extract', promfriends_rule_file_names) | list }}
+
+# Remove only unused tags from the requested repository, never its deployed tag.
+promfriends_docker_images_to_remove: >-
+  {{ promfriends_docker_state.images
+     | map(attribute='RepoTags') | select() | flatten
+     | select('match', '^' ~ (image | regex_replace(':[^:/]+$', '') | regex_escape) ~ ':')
+     | difference(promfriends_docker_state.containers | map(attribute='Image') | list)
+     | difference([image]) }}
+
 promnode_url_prefix: "https://github.com/prometheus/node_exporter/releases/download/v{{promnode_version}}/"
 promnode_file_prefix: "node_exporter-{{promnode_version}}.linux"
 promnode_amd64_file: "{{promnode_file_prefix}}-amd64.tar.gz"
@@ -13,7 +38,33 @@ promnode_arm64_file: "{{promnode_file_prefix}}-arm64.tar.gz"
 promnode_binary_prefix: "{{promnode_cache_path}}/{{promnode_file_prefix}}"
 promnode_bin: "{{promnode_binary_path}}/node_exporter"
 
-cadvisor_image: "gcr.io/cadvisor/cadvisor:v{{cadvisor_version}}"
+# This registry publishes current cAdvisor releases with v-prefixed tags.
+cadvisor_image: "ghcr.io/google/cadvisor:v{{cadvisor_version}}"
+
+# An empty metric list must omit --disable_metrics; an empty value is invalid.
+cadvisor_command: >-
+  --logtostderr=true
+  --port={{cadvisor_port}}
+  --docker_only={{cadvisor_docker_only | bool | ternary('true', 'false')}}
+  --store_container_labels={{cadvisor_store_container_labels | bool | ternary('true', 'false')}}
+  --housekeeping_interval={{cadvisor_housekeeping_interval}}
+  --max_housekeeping_interval={{cadvisor_max_housekeeping_interval}}
+  {{ ('--disable_metrics=' ~ (cadvisor_disable_metrics | join(','))) if cadvisor_disable_metrics | length > 0 else '' }}
+
+# The process metric requires host /proc, so derive PID mode from its enablement.
+cadvisor_pid_mode: >-
+  {{ 'host' if 'process' not in cadvisor_disable_metrics else '' }}
+
+# Host PID mode breaks the image probe's port inference; probe the configured port.
+cadvisor_healthcheck:
+  test:
+    - "CMD-SHELL"
+    - >-
+      wget -q -T 3 --tries=1 --spider
+      http://localhost:{{cadvisor_port}}/healthz || exit 1
+  interval: "30s"
+  timeout: "3s"
+  start_period: "5s"
 prometheus_image: "prom/prometheus:v{{prometheus_version}}"
 prometheus_command: >-
   --storage.tsdb.retention.time={{prometheus_retention_time}}
@@ -21,6 +72,7 @@ prometheus_command: >-
   --storage.tsdb.path=/prometheus
   --web.config.file=/web_config.yml
   --log.level={{prometheus_log_level}}
+  --rules.alert.for-grace-period={{prometheus_for_grace_period}}
   --web.listen-address={{prometheus_address}}:{{prometheus_port}}
 
 prombb_image: "prom/blackbox-exporter:v{{prombb_version}}"

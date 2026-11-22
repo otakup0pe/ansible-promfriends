@@ -3,6 +3,8 @@
   hosts: all
   become: true
   gather_facts: true
+  vars_files:
+    - ../../defaults/main.yml
   tasks:
     - name: Install prerequisites
       ansible.builtin.apt:
@@ -20,9 +22,7 @@
         name: docker
         state: present
 
-    # Reproduce a node-only host which has Docker installed. The role's base
-    # probe must see Docker as available without allowing container cleanup
-    # tasks to touch a remote Docker API.
+    # Exercise node-only dispatch without a remote Docker API.
     - name: Stub Docker availability for node-only dispatch coverage
       ansible.builtin.copy:
         dest: /usr/local/bin/docker
@@ -36,6 +36,36 @@
         path: /opt/prometheus/etc
         state: directory
         mode: "0755"
+
+    - name: Seed stale blackbox config
+      ansible.builtin.copy:
+        content: "stale\n"
+        dest: /opt/prometheus/etc/blackbox.yml
+        mode: "0600"
+
+    - name: Seed stale textfile exporter directories
+      ansible.builtin.file:
+        path: "{{item}}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{promnode_pkg_exporter_install_path}}"
+        - "{{promnode_text_path}}"
+
+    - name: Seed stale textfile exporter artifacts
+      ansible.builtin.copy:
+        dest: "{{item}}"
+        content: "stale\n"
+        mode: "0644"
+      loop:
+        - "{{promnode_pkg_exporter_install_path}}/stale"
+        - "{{promnode_kernel_metrics_install_path}}/promnode-kernel-metrics.sh"
+        - "{{promnode_text_path}}/pkg-exporter.prom"
+        - "{{promnode_text_path}}/kernel-metrics.prom"
+        - "/etc/systemd/system/promnode-pkg-exporter.timer"
+        - "/etc/systemd/system/promnode-pkg-exporter.service"
+        - "/etc/systemd/system/promnode-kernel-metrics.timer"
+        - "/etc/systemd/system/promnode-kernel-metrics.service"
 
     # node_exporter is configured for mutual TLS
     - name: Generate a self-signed TLS cert (also used as the client CA)

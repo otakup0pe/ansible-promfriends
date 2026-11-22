@@ -1,0 +1,84 @@
+---
+- name: "cadvisor configuration contract"
+  hosts: "localhost"
+  connection: "local"
+  gather_facts: false
+  tasks:
+    - name: "load role defaults and derived variables"
+      ansible.builtin.include_vars:
+        file: "{{ item }}"
+      loop:
+        - "../defaults/main.yml"
+        - "../vars/main.yml"
+
+    - name: "resolve default container inputs"
+      ansible.builtin.set_fact:
+        default_publish_parts: "{{ (cadvisor_publish | first).split(':') }}"
+        default_command_port: >-
+          {{ cadvisor_command | regex_search('--port=([0-9]+)', '\1') | first }}
+        default_healthcheck_port: >-
+          {{ cadvisor_healthcheck.test | last
+             | regex_search('localhost:([0-9]+)/healthz', '\1') | first }}
+
+    - name: "shipped defaults form a private, coherent deployment"
+      ansible.builtin.assert:
+        that:
+          - cadvisor_publish | length == 1
+          - default_publish_parts | length == 3
+          - default_publish_parts[0] == cadvisor_address
+          - default_publish_parts[1] == cadvisor_port
+          - default_publish_parts[2] == cadvisor_port
+          - default_command_port == cadvisor_port
+          # Host PID mode requires an explicit healthcheck port.
+          - default_healthcheck_port == cadvisor_port
+          - cadvisor_address in ["127.0.0.1", "::1", "localhost"]
+          - cadvisor_health_host not in ["0.0.0.0", "::", ""]
+          - cadvisor_docker_only | bool
+          - not cadvisor_store_container_labels | bool
+          - (cadvisor_disable_metrics | length > 0) == ("--disable_metrics=" in cadvisor_command)
+          # Process metrics and host PID mode must be enabled together.
+          - >-
+            ('process' not in cadvisor_disable_metrics)
+            == (cadvisor_pid_mode == 'host')
+        fail_msg: "cAdvisor defaults do not form a private, coherent deployment"
+
+    # set_fact outranks include_vars while derived variables remain lazy.
+    - name: "apply consumer overrides"
+      ansible.builtin.set_fact:
+        cadvisor_address: "0.0.0.0"
+        cadvisor_port: "19980"
+        cadvisor_disable_metrics: []
+
+    - name: "resolve overridden container inputs"
+      ansible.builtin.set_fact:
+        override_publish_parts: "{{ (cadvisor_publish | first).split(':') }}"
+        override_command_port: >-
+          {{ cadvisor_command | regex_search('--port=([0-9]+)', '\1') | first }}
+        override_healthcheck_port: >-
+          {{ cadvisor_healthcheck.test | last
+             | regex_search('localhost:([0-9]+)/healthz', '\1') | first }}
+
+    - name: "consumer overrides reach every derived container input"
+      ansible.builtin.assert:
+        that:
+          - override_publish_parts[0] == cadvisor_address
+          - override_publish_parts[1] == cadvisor_port
+          - override_publish_parts[2] == cadvisor_port
+          - override_command_port == cadvisor_port
+          - override_healthcheck_port == cadvisor_port
+          - cadvisor_health_host not in ["0.0.0.0", "::", ""]
+          - "'--disable_metrics' not in cadvisor_command"
+          # Overrides must recompute the derived PID mode.
+          - cadvisor_pid_mode == "host"
+        fail_msg: "cAdvisor overrides did not reach every derived container input"
+
+    - name: "apply a specific bind override"
+      ansible.builtin.set_fact:
+        cadvisor_address: "192.0.2.10"
+
+    - name: "readiness follows a specific bind override"
+      ansible.builtin.assert:
+        that:
+          - (cadvisor_publish | first).split(':') | first == cadvisor_address
+          - cadvisor_health_host == cadvisor_address
+        fail_msg: "cAdvisor readiness does not follow the configured bind address"

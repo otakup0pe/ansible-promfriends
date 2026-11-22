@@ -1,0 +1,5 @@
+---
+roles:
+  - name: ANXS.python
+    src: https://github.com/ANXS/python
+    version: master

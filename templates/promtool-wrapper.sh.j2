@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# docker promtool wrapper
 
 set -e
 
@@ -25,9 +24,11 @@ elif [ "$ACTION" == "check-web-config" ] ; then
 elif [ "$ACTION" == "check-rules" ] ; then
     CMD="check rules"
 else
-    problem "invalid args"
+    problems "invalid args"
 fi
+# Validation must not leave stopped containers behind.
 docker run \
+       --rm \
        --user "$(id -u)" \
        --entrypoint /bin/promtool \
        -v "${CHECK_FILE}:/check.yml" \

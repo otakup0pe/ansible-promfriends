@@ -1,0 +1,51 @@
+---
+- name: "image selection contract"
+  hosts: "localhost"
+  connection: "local"
+  gather_facts: false
+  vars:
+    image: "prom/prometheus:v3.11.2"
+    promfriends_docker_state:
+      images:
+        - RepoTags: ["prom/prometheus:v3.11.2"]
+        - RepoTags: ["prom/prometheus:v3.10.0"]
+        - RepoTags: ["prom/prometheus:v3.9.1"]
+        - RepoTags: ["prom/alertmanager:v0.32.0"]
+        - RepoTags: ["grafana/grafana:12.4.0"]
+        - RepoTags: null
+      containers:
+        - Image: "prom/prometheus:v3.11.2"
+        - Image: "prom/prometheus:v3.9.1"
+        - Image: "grafana/grafana:12.4.0"
+
+  tasks:
+    - name: "load production image selector"
+      ansible.builtin.include_vars:
+        file: "../vars/main.yml"
+
+    - name: "assert only an unused superseded tag is selected"
+      ansible.builtin.assert:
+        that:
+          - promfriends_docker_images_to_remove == ["prom/prometheus:v3.10.0"]
+        fail_msg: >-
+          unexpected image selection:
+          {{promfriends_docker_images_to_remove}}
+
+    - name: "assert repository matching preserves a registry port"
+      vars:
+        image: "reg.example:5000/thing:v2"
+        promfriends_docker_state:
+          images:
+            - RepoTags: ["reg.example:5000/thing:v2"]
+            - RepoTags: ["reg.example:5000/thing:v1"]
+            - RepoTags: ["reg.example:5001/thing:v0"]
+          containers:
+            - Image: "reg.example:5000/thing:v2"
+      ansible.builtin.assert:
+        that:
+          - >-
+            promfriends_docker_images_to_remove
+            == ["reg.example:5000/thing:v1"]
+        fail_msg: >-
+          ported registry selection:
+          {{promfriends_docker_images_to_remove}}

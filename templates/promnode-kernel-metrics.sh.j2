@@ -1,0 +1,87 @@
+#!/bin/sh
+# {{ ansible_managed }}
+# Reports whether the running kernel is newest installed within its flavour.
+# This is distinct from distribution reboot-required state.
+
+set -eu
+
+OUTFILE="${KERNEL_METRICS_FILE:-{{promnode_text_path}}/kernel-metrics.prom}"
+BOOT_DIR="${KERNEL_METRICS_BOOT_DIR:-/boot}"
+
+running="$(uname -r)"
+
+# Flavour parsing must match files/kernel-flavour-spec.yml.
+kernel_flavour() {
+    case "$_family" in
+        debian) printf '%s\n' "${1##*-}" ;;
+        *) return 1 ;;
+    esac
+}
+
+_family=""
+if [ -r /etc/os-release ]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    for _candidate in ${ID:-} ${ID_LIKE:-}; do
+        case "$_candidate" in
+            debian|ubuntu|raspbian) _family="debian"; break ;;
+        esac
+    done
+fi
+
+# Publish unsupported families explicitly; absence can mean not deployed.
+if [ -z "$_family" ]; then
+    tmp="$(mktemp "${OUTFILE}.XXXXXX")"
+    trap 'rm -f "$tmp"' EXIT
+    cat > "$tmp" <<EOF
+# HELP pkg_kernel_flavour_unsupported 1 when this OS family has no flavour rule implemented.
+# TYPE pkg_kernel_flavour_unsupported gauge
+pkg_kernel_flavour_unsupported{id="${ID:-unknown}"} 1
+EOF
+    chmod 644 "$tmp"
+    mv "$tmp" "$OUTFILE"
+    trap - EXIT
+    exit 0
+fi
+
+flavour="$(kernel_flavour "$running")"
+
+newest=""
+for img in "$BOOT_DIR"/vmlinuz-*; do
+    [ -e "$img" ] || continue
+    candidate="${img##*/vmlinuz-}"
+    [ "${candidate##*-}" = "$flavour" ] || continue
+    if [ -z "$newest" ]; then
+        newest="$candidate"
+        continue
+    fi
+    newest="$(printf '%s\n%s\n' "$newest" "$candidate" | sort -V | tail -n 1)"
+done
+
+# No matching installed image makes newest status unknowable.
+if [ -z "$newest" ]; then
+    rm -f "$OUTFILE"
+    exit 0
+fi
+
+if [ "$running" = "$newest" ]; then
+    is_newest=1
+else
+    is_newest=0
+fi
+
+tmp="$(mktemp "${OUTFILE}.XXXXXX")"
+trap 'rm -f "$tmp"' EXIT
+
+cat > "$tmp" <<EOF
+# HELP pkg_kernel_running_is_newest 1 when the running kernel is the newest installed kernel of its flavour.
+# TYPE pkg_kernel_running_is_newest gauge
+pkg_kernel_running_is_newest ${is_newest}
+# HELP pkg_kernel_info Running and newest-installed kernel release, scoped to the running flavour.
+# TYPE pkg_kernel_info gauge
+pkg_kernel_info{running="${running}",newest_installed="${newest}",flavour="${flavour}"} 1
+EOF
+
+chmod 644 "$tmp"
+mv "$tmp" "$OUTFILE"
+trap - EXIT

@@ -1,0 +1,23 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    promfriends_contexts:
+      - node
+    promnode_pkg_exporter: true
+    promnode_pkg_exporter_oncalendar: "daily"
+    promnode_pkg_exporter_onactivesec: "1s"
+    promnode_pkg_exporter_accuracysec: "1s"
+  roles:
+    - role: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | basename }}"
+  tasks:
+    # A string "False" would be truthy and rebuild the venv every run.
+    - name: Assert the venv health fact is a real boolean
+      ansible.builtin.assert:
+        that:
+          - promnode_pkg_exporter_venv_broken is boolean
+        fail_msg: >-
+          promnode_pkg_exporter_venv_broken must be a boolean, got
+          {{ promnode_pkg_exporter_venv_broken | type_debug }}
